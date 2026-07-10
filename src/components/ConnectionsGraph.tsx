@@ -12,6 +12,15 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Maximize2, Minimize2 } from "lucide-react";
+import {
+  forceSimulation,
+  forceManyBody,
+  forceCollide,
+  forceLink,
+  forceX,
+  forceY,
+  forceCenter,
+} from "d3-force";
 import type { AnalyzeResult, TechCategory } from "@/lib/analyze.functions";
 
 type Group = "frontend" | "backend" | "platform";
@@ -54,6 +63,64 @@ const CATEGORY_GROUP: Record<TechCategory, Group> = {
   misc: "platform",
 };
 
+const FRONTEND_HOSTING_NAMES = [
+  "Vercel",
+  "Netlify",
+  "Cloudflare Pages",
+  "GitHub Pages",
+  "Surge",
+  "Render",
+  "Railway",
+  "Fly.io",
+  "GitLab Pages",
+];
+const BACKEND_HOSTING_NAMES = [
+  "Hetzner",
+  "IONOS",
+  "ALL-INKL",
+  "All-Inkl",
+  "Neue Medien",
+  "Strato",
+  "Host Europe",
+  "DomainFactory",
+  "Contabo",
+  "AWS",
+  "Google Cloud",
+  "Azure",
+  "DigitalOcean",
+  "Linode",
+];
+
+function resolveGroup(cat: TechCategory, techNames: string[], hostingOrg: string | null): Group {
+  const namesLower = techNames.map((n) => n.toLowerCase());
+  const orgLower = hostingOrg?.toLowerCase() ?? "";
+
+  if (cat === "hosting") {
+    if (FRONTEND_HOSTING_NAMES.some((n) => namesLower.includes(n.toLowerCase()))) return "frontend";
+    if (
+      BACKEND_HOSTING_NAMES.some(
+        (n) => orgLower.includes(n.toLowerCase()) || namesLower.includes(n.toLowerCase()),
+      )
+    )
+      return "backend";
+    return "frontend";
+  }
+
+  if (cat === "webserver") {
+    if (namesLower.some((n) => ["vercel", "netlify", "cloudflare", "github pages"].includes(n)))
+      return "frontend";
+    return "backend";
+  }
+
+  if (cat === "language") {
+    if (namesLower.includes("javascript") || namesLower.includes("typescript")) return "frontend";
+    if (namesLower.includes("php") || namesLower.includes("python") || namesLower.includes("ruby"))
+      return "backend";
+  }
+
+  return CATEGORY_GROUP[cat];
+}
+
 const CATEGORY_META: Record<TechCategory, { label: string; color: string; ring: string }> = {
   "javascript-framework": { label: "JS Framework", color: "#60a5fa", ring: "rgba(96,165,250,.35)" },
   "javascript-library": { label: "JS Library", color: "#7dd3fc", ring: "rgba(125,211,252,.35)" },
@@ -88,9 +155,6 @@ const CATEGORY_META: Record<TechCategory, { label: string; color: string; ring: 
 
 function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
   const { nodes, edges } = useMemo(() => {
-    const nodes: Node[] = [];
-    const edges: Edge[] = [];
-
     let host = "";
     try {
       host = new URL(result.finalUrl).hostname;
@@ -98,23 +162,64 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
       host = result.url;
     }
 
-    // Center site node
-    nodes.push({
-      id: "site",
-      position: { x: 0, y: 0 },
-      data: { label: host },
-      style: {
-        background: "linear-gradient(135deg,#0ea5e9,#8b5cf6)",
-        color: "white",
-        border: "2px solid rgba(255,255,255,0.25)",
-        boxShadow: "0 0 40px rgba(139,92,246,0.5)",
-        borderRadius: 999,
-        padding: "18px 26px",
-        fontWeight: 700,
-        fontSize: 14,
-      },
-      sourcePosition: undefined,
-      targetPosition: undefined,
+    const hostingOrg = result.hostingDetails?.org;
+
+    type SimNode = {
+      id: string;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      group: Group;
+      style: React.CSSProperties;
+      data: { label: string };
+    };
+
+    const simNodes: SimNode[] = [];
+    const edges: Edge[] = [];
+
+    function pushNode(
+      id: string,
+      x: number,
+      y: number,
+      label: string,
+      group: Group,
+      style: React.CSSProperties,
+    ) {
+      // rough size estimation based on label length and padding/fontSize
+      const charWidth = (typeof style.fontSize === "number" ? style.fontSize : 13) * 0.55;
+      const padding =
+        typeof style.padding === "string"
+          ? style.padding
+              .split(" ")
+              .map((p) => parseInt(p, 10) || 0)
+              .reduce((a, b) => a + b, 0)
+          : 28;
+      const width = Math.max(80, label.length * charWidth + padding + 20);
+      const height = (typeof style.fontSize === "number" ? style.fontSize : 13) + padding + 8;
+      simNodes.push({
+        id,
+        x,
+        y,
+        width,
+        height,
+        group,
+        style,
+        data: { label },
+      });
+      return id;
+    }
+
+    // Center site node (homepage)
+    pushNode("site", 0, 0, host, "platform", {
+      background: "linear-gradient(135deg,#0ea5e9,#8b5cf6)",
+      color: "white",
+      border: "2px solid rgba(255,255,255,0.25)",
+      boxShadow: "0 0 40px rgba(139,92,246,0.5)",
+      borderRadius: 999,
+      padding: "22px 30px",
+      fontWeight: 800,
+      fontSize: 15,
     });
 
     // Group tech by category
@@ -127,30 +232,26 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
     // Group categories by frontend / backend / platform
     const groups: Group[] = ["frontend", "backend", "platform"];
     const groupPositions: Record<Group, { x: number; y: number }> = {
-      frontend: { x: -520, y: 0 },
-      backend: { x: 520, y: 0 },
-      platform: { x: 0, y: 420 },
+      frontend: { x: -600, y: -80 },
+      backend: { x: 600, y: -80 },
+      platform: { x: 0, y: 480 },
     };
 
     for (const group of groups) {
       const groupMeta = GROUP_META[group];
       const groupId = `group-${group}`;
-      nodes.push({
-        id: groupId,
-        position: groupPositions[group],
-        data: { label: groupMeta.label },
-        style: {
-          background: "rgba(255,255,255,0.04)",
-          color: groupMeta.color,
-          border: `2px dashed ${groupMeta.color}`,
-          boxShadow: `0 0 40px ${groupMeta.ring}`,
-          borderRadius: 999,
-          padding: "12px 24px",
-          fontSize: 14,
-          fontWeight: 700,
-          letterSpacing: "0.05em",
-          textTransform: "uppercase",
-        },
+      const gp = groupPositions[group];
+      pushNode(groupId, gp.x, gp.y, groupMeta.label, group, {
+        background: "rgba(255,255,255,0.04)",
+        color: groupMeta.color,
+        border: `2px dashed ${groupMeta.color}`,
+        boxShadow: `0 0 40px ${groupMeta.ring}`,
+        borderRadius: 999,
+        padding: "12px 24px",
+        fontSize: 14,
+        fontWeight: 700,
+        letterSpacing: "0.05em",
+        textTransform: "uppercase",
       });
       edges.push({
         id: `e-site-${groupId}`,
@@ -162,14 +263,21 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
     }
 
     const cats = [...byCat.keys()];
-    const radiusCat = 300;
+    const radiusCat = 320;
     cats.forEach((cat, i) => {
-      const group = CATEGORY_GROUP[cat];
+      const techNames = byCat.get(cat)!.map((t) => t.name);
+      const group = resolveGroup(cat, techNames, hostingOrg);
       const groupMeta = GROUP_META[group];
       const groupCenter = groupPositions[group];
 
-      // distribute categories around their group center
-      const groupCats = cats.filter((c) => CATEGORY_GROUP[c] === group);
+      const groupCats = cats.filter(
+        (c) =>
+          resolveGroup(
+            c,
+            byCat.get(c)!.map((t) => t.name),
+            hostingOrg,
+          ) === group,
+      );
       const idxInGroup = groupCats.indexOf(cat);
       const angleSpan = Math.PI * 1.2;
       const angle =
@@ -187,21 +295,16 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
       const cy = groupCenter.y + Math.sin(angle) * radiusCat;
       const meta = CATEGORY_META[cat];
       const catId = `cat-${cat}`;
-      nodes.push({
-        id: catId,
-        position: { x: cx, y: cy },
-        data: { label: meta.label },
-        style: {
-          background: "rgba(255,255,255,0.04)",
-          color: meta.color,
-          border: `1px dashed ${meta.color}`,
-          borderRadius: 999,
-          padding: "8px 16px",
-          fontSize: 12,
-          fontWeight: 600,
-          letterSpacing: "0.04em",
-          textTransform: "uppercase",
-        },
+      pushNode(catId, cx, cy, meta.label, group, {
+        background: "rgba(255,255,255,0.04)",
+        color: meta.color,
+        border: `1px dashed ${meta.color}`,
+        borderRadius: 999,
+        padding: "8px 16px",
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: "0.04em",
+        textTransform: "uppercase",
       });
       edges.push({
         id: `e-group-${group}-${catId}`,
@@ -212,28 +315,23 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
       });
 
       const items = byCat.get(cat)!;
-      const spread = Math.max(180, items.length * 75);
+      const spread = Math.max(200, items.length * 85);
       items.forEach((tech, j) => {
         const offset = (j - (items.length - 1) / 2) * (spread / Math.max(items.length, 1));
         const perpX = -Math.sin(angle);
         const perpY = Math.cos(angle);
-        const outX = groupCenter.x + Math.cos(angle) * (radiusCat + 240) + perpX * offset;
-        const outY = groupCenter.y + Math.sin(angle) * (radiusCat + 240) + perpY * offset;
+        const outX = groupCenter.x + Math.cos(angle) * (radiusCat + 260) + perpX * offset;
+        const outY = groupCenter.y + Math.sin(angle) * (radiusCat + 260) + perpY * offset;
         const id = `tech-${cat}-${j}`;
-        nodes.push({
-          id,
-          position: { x: outX, y: outY },
-          data: { label: tech.name },
-          style: {
-            background: "hsl(224 20% 12%)",
-            color: "white",
-            border: `1.5px solid ${meta.color}`,
-            boxShadow: `0 0 24px ${meta.ring}`,
-            borderRadius: 14,
-            padding: "10px 14px",
-            fontSize: 13,
-            fontWeight: 600,
-          },
+        pushNode(id, outX, outY, tech.name, group, {
+          background: "hsl(224 20% 12%)",
+          color: "white",
+          border: `1.5px solid ${meta.color}`,
+          boxShadow: `0 0 24px ${meta.ring}`,
+          borderRadius: 14,
+          padding: "10px 14px",
+          fontSize: 13,
+          fontWeight: 600,
         });
         edges.push({
           id: `e-${catId}-${id}`,
@@ -244,6 +342,44 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
         });
       });
     });
+
+    // Run d3-force simulation to avoid overlaps while keeping the cluster structure
+    const simulation = forceSimulation<SimNode>(simNodes)
+      .force(
+        "link",
+        forceLink<SimNode, { source: string; target: string }>(
+          edges.map((e) => ({ source: e.source, target: e.target })),
+        )
+          .id((d) => d.id)
+          .distance((d) => {
+            const s = d.source as unknown as SimNode;
+            const t = d.target as unknown as SimNode;
+            if (s.id === "site" || t.id === "site") return 260;
+            if (s.id.startsWith("group-") || t.id.startsWith("group-")) return 200;
+            return 130;
+          })
+          .strength(0.5),
+      )
+      .force(
+        "collide",
+        forceCollide<SimNode>()
+          .radius((d) => Math.max(d.width, d.height) / 2 + 18)
+          .strength(0.9),
+      )
+      .force("charge", forceManyBody().strength(-600))
+      .force("center", forceCenter(0, 0).strength(0.02))
+      .force("groupX", forceX<SimNode>((d) => groupPositions[d.group].x).strength(0.15))
+      .force("groupY", forceY<SimNode>((d) => groupPositions[d.group].y).strength(0.15))
+      .stop();
+
+    simulation.tick(300);
+
+    const nodes: Node[] = simNodes.map((n) => ({
+      id: n.id,
+      position: { x: n.x, y: n.y },
+      data: n.data,
+      style: n.style,
+    }));
 
     return { nodes, edges };
   }, [result]);

@@ -84,7 +84,7 @@ function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-background text-foreground relative">
+    <div className="min-h-screen bg-background text-foreground relative flex flex-col">
       {/* Ambient background */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[500px] w-[900px] rounded-full bg-primary/15 blur-3xl" />
@@ -94,12 +94,13 @@ function Home() {
 
       <header className="border-b border-border/60 backdrop-blur-md sticky top-0 z-40 bg-background/70">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2 font-semibold tracking-tight">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-accent grid place-items-center shadow-lg shadow-primary/30">
-              <Sparkles className="h-4 w-4 text-primary-foreground" />
+          <div className="flex items-center gap-3 font-semibold tracking-tight">
+            <img src="/logo.png" alt="SiteScope" className="h-10 w-auto" />
+            <div className="flex flex-col leading-none">
+              <span className="text-lg">SiteScope</span>
+              <span className="text-[10px] text-muted-foreground tracking-wide">Tech-Radar</span>
             </div>
-            <span className="text-lg">SiteScope</span>
-            <Badge variant="outline" className="ml-2 text-[10px] uppercase tracking-wider">
+            <Badge variant="outline" className="ml-1 text-[10px] uppercase tracking-wider">
               beta
             </Badge>
           </div>
@@ -114,7 +115,7 @@ function Home() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-10 sm:py-16">
+      <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-10 sm:py-16">
         {/* Hero + search */}
         <section className="text-center max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/50 px-3 py-1 text-xs text-muted-foreground mb-6">
@@ -190,7 +191,7 @@ function Home() {
         {m.data && <Results result={m.data} />}
       </main>
 
-      <footer className="border-t border-border/60 bg-card/30 backdrop-blur mt-16">
+      <footer className="border-t border-border/60 bg-card/30 backdrop-blur mt-auto">
         <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs text-muted-foreground">
           <div className="space-y-1">
             <div className="font-medium text-foreground">SiteScope</div>
@@ -949,9 +950,53 @@ function ArchitecturePanel({ result }: { result: AnalyzeResult }) {
               Server-Header
             </div>
             <div className="text-sm font-mono">
-              {detectedServer ?? (
+              {result.http.server ?? detectedServer ?? (
                 <span className="italic text-muted-foreground">nicht gesendet</span>
               )}
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg border border-border/50 bg-background/40 p-3">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                HTTP-Version
+              </div>
+              <div className="text-sm font-mono">{result.http.version ?? "—"}</div>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-background/40 p-3">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                HTTP/2
+              </div>
+              <div className="text-sm font-medium flex items-center gap-1.5">
+                {result.http.supportsHttp2 ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                    <span className="text-emerald-400">aktiv</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-3.5 w-3.5 text-rose-400" />
+                    <span className="text-rose-400">nein</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="rounded-lg border border-border/50 bg-background/40 p-3">
+              <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
+                HTTP/3
+              </div>
+              <div className="text-sm font-medium flex items-center gap-1.5">
+                {result.http.supportsHttp3 ? (
+                  <>
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                    <span className="text-emerald-400">verfügbar</span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                    <span className="text-muted-foreground">nein</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
           <div className="rounded-lg border border-border/50 bg-background/40 p-3">

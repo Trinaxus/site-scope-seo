@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import dns from "node:dns/promises";
+import https from "node:https";
+import http2 from "node:http2";
 
 export type TechCategory =
   | "javascript-framework"
@@ -152,11 +154,170 @@ export interface AnalyzeResult {
     region: string | null;
     nameservers: string[];
   }[];
+  http: {
+    version: string | null;
+    supportsHttp2: boolean;
+    supportsHttp3: boolean;
+    altSvc: string | null;
+    server: string | null;
+  };
   errors: string[];
   warnings: string[];
 }
 
 const InputSchema = z.object({ url: z.string().min(3) });
+
+async function checkHttp2Directly(
+  url: string,
+): Promise<{ supportsHttp2: boolean; altSvc: string | null }> {
+  const target = new URL(url);
+  if (target.protocol !== "https:") return { supportsHttp2: false, altSvc: null };
+  return new Promise((resolve) => {
+    let resolved = false;
+    const client = http2.connect(`https://${target.hostname}`, {
+      servername: target.hostname,
+    });
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        client.destroy();
+        resolve({ supportsHttp2: false, altSvc: null });
+      }
+    }, 10000);
+
+    client.on("connect", () => {
+      if (resolved) return;
+      try {
+        const req = client.request({
+          ":method": "HEAD",
+          ":path": target.pathname + target.search,
+          "user-agent":
+            "Mozilla/5.0 (compatible; SiteScopeBot/1.0; +https://sitescope.app) Chrome/120",
+        });
+        req.on("response", (headers) => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timer);
+            const altSvc = headers["alt-svc"] || null;
+            const alt =
+              typeof altSvc === "string" ? altSvc : Array.isArray(altSvc) ? altSvc[0] : null;
+            client.close();
+            resolve({ supportsHttp2: true, altSvc: alt });
+          }
+        });
+        req.on("error", () => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timer);
+            client.destroy();
+            resolve({ supportsHttp2: true, altSvc: null });
+          }
+        });
+        req.end();
+      } catch {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timer);
+          client.destroy();
+          resolve({ supportsHttp2: true, altSvc: null });
+        }
+      }
+    });
+
+    client.on("error", () => {
+      if (!resolved) {
+        resolved = true;
+        clearTimeout(timer);
+        client.destroy();
+        resolve({ supportsHttp2: false, altSvc: null });
+      }
+    });
+  });
+}
+
+async function checkHttpProtocols(url: string, warnings: string[]): Promise<AnalyzeResult["http"]> {
+  const target = new URL(url);
+  const defaultResult: AnalyzeResult["http"] = {
+    version: null,
+    supportsHttp2: false,
+    supportsHttp3: false,
+    altSvc: null,
+    server: null,
+  };
+
+  if (target.protocol !== "https:") return defaultResult;
+
+  const http2Promise = checkHttp2Directly(url);
+
+  const httpsPromise = new Promise<AnalyzeResult["http"]>((resolve) => {
+    const options: https.RequestOptions & { ALPNProtocols?: string[] } = {
+      hostname: target.hostname,
+      servername: target.hostname,
+      port: 443,
+      path: target.pathname + target.search,
+      method: "GET",
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (compatible; SiteScopeBot/1.0; +https://sitescope.app) Chrome/120",
+        accept: "*/*",
+      },
+      ALPNProtocols: ["h2", "http/1.1"],
+      timeout: 15000,
+    };
+    const req = https.request(options, (res) => {
+      res.resume(); // consume body so connection can close cleanly
+      const altSvc = res.headers["alt-svc"] || null;
+      const serverHeader = res.headers["server"];
+      const server =
+        typeof serverHeader === "string"
+          ? serverHeader
+          : Array.isArray(serverHeader)
+            ? serverHeader[0]
+            : null;
+      const version = res.httpVersion || null;
+      console.log(
+        `[checkHttpProtocols] ${url} -> status=${res.statusCode} version=${version} alt-svc=${altSvc} server=${server}`,
+      );
+      resolve({
+        version,
+        supportsHttp2: version === "2.0",
+        supportsHttp3: typeof altSvc === "string" && altSvc.includes("h3="),
+        altSvc,
+        server,
+      });
+    });
+
+    req.on("error", (err) => {
+      console.log(`[checkHttpProtocols] ERROR ${url}: ${err.message}`);
+      warnings.push(`HTTP-Protokoll-Check fehlgeschlagen: ${err.message}`);
+      resolve(defaultResult);
+    });
+    req.on("timeout", () => {
+      console.log(`[checkHttpProtocols] TIMEOUT ${url}`);
+      warnings.push("HTTP-Protokoll-Check: Zeitüberschreitung");
+      req.destroy();
+      resolve(defaultResult);
+    });
+    req.end();
+  });
+
+  const [httpsResult, http2Result] = await Promise.all([httpsPromise, http2Promise]);
+  console.log(
+    `[checkHttpProtocols] ${url} -> http2Direct=${http2Result.supportsHttp2} altSvcHttp2=${http2Result.altSvc}`,
+  );
+  const result = httpsResult;
+  if (http2Result.supportsHttp2) {
+    result.supportsHttp2 = true;
+    result.version = result.version ?? "2.0";
+  }
+  // Prefer alt-svc from the real HTTP/2 response if available.
+  const altSvc = http2Result.altSvc ?? result.altSvc;
+  if (altSvc) {
+    result.altSvc = altSvc;
+    result.supportsHttp3 = /h3(?:-[0-9]+)?=/i.test(altSvc) || altSvc.toLowerCase().includes("h3=");
+  }
+  return result;
+}
 
 function normalizeUrl(raw: string): string {
   let u = raw.trim();
@@ -1192,8 +1353,27 @@ export const analyzeSite = createServerFn({ method: "POST" })
     const finalUrl = response.url || startUrl;
     const origin = new URL(finalUrl).origin;
 
+    let http = await checkHttpProtocols(finalUrl, warnings);
     const headers: Record<string, string> = {};
     response.headers.forEach((v, k) => (headers[k.toLowerCase()] = v));
+
+    // Fallback: if ALPN check did not detect a version but alt-svc advertises h2/h3,
+    // use the header signal so we don't show "unknown" on HTTP/2-only hosts.
+    if (!http.version && headers["alt-svc"]) {
+      const alt = headers["alt-svc"];
+      http = {
+        ...http,
+        altSvc: alt,
+        supportsHttp3: /h3=/i.test(alt),
+        supportsHttp2: /h2=/i.test(alt) || /h2/i.test(alt),
+        version: /h3=/i.test(alt) ? "2.0" : /h2/i.test(alt) ? "2.0" : http.version,
+      };
+    }
+
+    // Final fallback: if Node https returned HTTP/1.1 but alt-svc offers h3, mark h3 available.
+    if (http.version === "1.1" && headers["alt-svc"] && /h3=/i.test(headers["alt-svc"])) {
+      http = { ...http, supportsHttp3: true };
+    }
 
     // Cookies
     const setCookies: string[] = [];
@@ -1715,12 +1895,17 @@ export const analyzeSite = createServerFn({ method: "POST" })
       {
         key: "http2",
         label: "HTTP/2 oder höher",
-        ok:
-          /h2|h3|http\/2|http\/3/i.test(
-            (headers["alt-svc"] ?? "") + " " + (headers["x-protocol"] ?? ""),
-          ) || !!headers["x-http2-stream-id"],
-        value: headers["alt-svc"] ? "verfügbar" : "unbekannt",
-        advice: "HTTP/2 oder HTTP/3 verbessert Multiplexing und Ladezeiten.",
+        ok: http.supportsHttp2 || http.supportsHttp3,
+        value: http.supportsHttp3
+          ? "HTTP/3 verfügbar"
+          : http.supportsHttp2
+            ? "HTTP/2 aktiv"
+            : http.version === "1.1"
+              ? "HTTP/1.1"
+              : "unbekannt",
+        advice: http.supportsHttp2
+          ? "HTTP/2 oder HTTP/3 verbessert Multiplexing und Ladezeiten."
+          : "Aktiviere HTTP/2 oder HTTP/3, um Ladezeiten zu verbessern.",
         howToFix:
           "Nutze ein modernes CDN oder Hosting, das HTTP/2 bzw. HTTP/3 automatisch bereitstellt (Cloudflare, Fastly, Vercel, Netlify).",
         location: "Hosting/CDN-Einstellungen.",
@@ -2114,6 +2299,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
       hostingDetails,
       externalApis,
       backendHosting,
+      http,
       errors,
       warnings,
     };
