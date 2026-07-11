@@ -79,6 +79,9 @@ export interface AnalyzeResult {
     security: number;
     performance: number;
     compliance: number;
+    mobile: number;
+    business: number;
+    wordpress: number;
     overall: number;
   };
   meta: {
@@ -101,6 +104,9 @@ export interface AnalyzeResult {
   seoChecks: SeoCheck[];
   perfChecks: SeoCheck[];
   complianceChecks: SeoCheck[];
+  mobileChecks: SeoCheck[];
+  businessChecks: SeoCheck[];
+  wpChecks: SeoCheck[];
   headers: Record<string, string>;
   securityHeaders: SecurityHeader[];
   cookies: { name: string; secure: boolean; httpOnly: boolean; sameSite: string | null }[];
@@ -330,7 +336,21 @@ function scoreFromChecks(passed: number, total: number): number {
   return Math.round((passed / total) * 100);
 }
 
-// Fingerprints — pattern-based detection
+function decodeHtmlEntities(input: string | null | undefined): string | null {
+  if (!input) return null;
+  return input
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
+}
+
+// Fingerprints - pattern-based detection
 type Fingerprint = {
   name: string;
   category: TechCategory;
@@ -1396,12 +1416,13 @@ export const analyzeSite = createServerFn({ method: "POST" })
 
     // Meta extraction
     const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-    const title = titleMatch ? titleMatch[1].trim() : null;
-    const description =
+    const title = decodeHtmlEntities(titleMatch ? titleMatch[1].trim() : null);
+    const description = decodeHtmlEntities(
       pickAttr(html, "meta", "name", "content") && /name=["']description["']/i.test(html)
         ? (html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']*)["']/i)?.[1] ??
-          null)
-        : null;
+            null)
+        : null,
+    );
     const canonical =
       html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i)?.[1] ?? null;
     const lang = html.match(/<html[^>]+lang=["']([^"']+)["']/i)?.[1] ?? null;
@@ -1410,29 +1431,35 @@ export const analyzeSite = createServerFn({ method: "POST" })
       null;
     const ogImage =
       html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null;
-    const ogTitle =
-      html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null;
-    const ogDescription =
+    const ogTitle = decodeHtmlEntities(
+      html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null,
+    );
+    const ogDescription = decodeHtmlEntities(
       html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)?.[1] ??
-      null;
-    const twitterCard =
-      html.match(/<meta[^>]+name=["']twitter:card["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null;
+        null,
+    );
+    const twitterCard = decodeHtmlEntities(
+      html.match(/<meta[^>]+name=["']twitter:card["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null,
+    );
     const viewport =
       html.match(/<meta[^>]+name=["']viewport["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null;
     const charset = html.match(/<meta[^>]+charset=["']?([^"'\s>]+)/i)?.[1] ?? null;
-    const generator =
-      html.match(/<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null;
+    const generator = decodeHtmlEntities(
+      html.match(/<meta[^>]+name=["']generator["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null,
+    );
     const themeColor =
       html.match(/<meta[^>]+name=["']theme-color["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null;
-    const author =
-      html.match(/<meta[^>]+name=["']author["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null;
-    const robotsMeta =
-      html.match(/<meta[^>]+name=["']robots["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null;
+    const author = decodeHtmlEntities(
+      html.match(/<meta[^>]+name=["']author["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null,
+    );
+    const robotsMeta = decodeHtmlEntities(
+      html.match(/<meta[^>]+name=["']robots["'][^>]+content=["']([^"']+)["']/i)?.[1] ?? null,
+    );
 
     // Headings
     const h1s = [...html.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/gi)]
-      .map((m) => m[1].replace(/<[^>]+>/g, "").trim())
-      .filter(Boolean);
+      .map((m) => decodeHtmlEntities(m[1].replace(/<[^>]+>/g, "").trim()))
+      .filter(Boolean) as string[];
     const h2Count = (html.match(/<h2\b/gi) || []).length;
     const h3Count = (html.match(/<h3\b/gi) || []).length;
 
@@ -1524,14 +1551,28 @@ export const analyzeSite = createServerFn({ method: "POST" })
         "Server-Konfiguration (nginx.conf, .htaccess, _headers, Cloudflare Transform Rules).",
         "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Strict-Transport-Security",
       ),
-      sec(
-        "content-security-policy",
-        (v) => !!v,
-        "Füge eine Content-Security-Policy hinzu, um XSS zu verhindern.",
-        "Starte mit einer Report-Only Policy (Content-Security-Policy-Report-Only), logge Verstöße und verschärfe dann. Beispiel: default-src 'self'; script-src 'self'; object-src 'none'.",
-        "Webserver/CDN-Konfiguration oder Meta-Tag im <head> (nicht empfohlen für alle Direktiven).",
-        "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy",
-      ),
+      ((): SecurityHeader => {
+        const v = headers["content-security-policy"] ?? null;
+        const reportOnly = headers["content-security-policy-report-only"] ?? null;
+        const passed = !!(v || reportOnly);
+        return {
+          name: "content-security-policy",
+          value: v ?? reportOnly,
+          ok: passed,
+          advice: passed
+            ? undefined
+            : "Füge eine Content-Security-Policy hinzu, um XSS zu verhindern.",
+          howToFix: passed
+            ? undefined
+            : "Starte mit einer Report-Only Policy (Content-Security-Policy-Report-Only), logge Verstöße und verschärfe dann. Beispiel: default-src 'self'; script-src 'self'; object-src 'none'.",
+          location: passed
+            ? undefined
+            : "Webserver/CDN-Konfiguration oder Meta-Tag im <head> (nicht empfohlen für alle Direktiven).",
+          learnMore: passed
+            ? undefined
+            : "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy",
+        };
+      })(),
       sec(
         "x-content-type-options",
         (v) => v?.toLowerCase() === "nosniff",
@@ -1592,7 +1633,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         key: "title",
         label: "Title tag",
         ok: !!title && title.length >= 10 && title.length <= 65,
-        value: title ?? "—",
+        value: title ?? "-",
         advice: !title
           ? "<title> fehlt."
           : title.length < 10
@@ -1614,7 +1655,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         key: "description",
         label: "Meta description",
         ok: !!description && description.length >= 50 && description.length <= 165,
-        value: description ?? "—",
+        value: description ?? "-",
         advice: !description
           ? "Meta description fehlt."
           : description.length < 50
@@ -1657,7 +1698,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         key: "canonical",
         label: "Canonical URL",
         ok: !!canonical,
-        value: canonical ?? "—",
+        value: canonical ?? "-",
         advice: !canonical ? 'Füge <link rel="canonical"> hinzu.' : undefined,
         howToFix:
           'Füge im <head> ein: <link rel="canonical" href="https://deine-domain.de/diese-seite/">.',
@@ -1668,7 +1709,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         key: "viewport",
         label: "Viewport meta",
         ok: !!viewport,
-        value: viewport ?? "—",
+        value: viewport ?? "-",
         advice: !viewport ? "Viewport-Meta-Tag für Mobile fehlt." : undefined,
         howToFix:
           'Füge im <head> hinzu: <meta name="viewport" content="width=device-width, initial-scale=1">.',
@@ -1679,7 +1720,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         key: "lang",
         label: "HTML lang attribute",
         ok: !!lang,
-        value: lang ?? "—",
+        value: lang ?? "-",
         advice: !lang ? 'Setze <html lang="...">.' : undefined,
         howToFix: 'Setze das lang-Attribut auf der <html>-Wurzel, z. B. <html lang="de">.',
         location: "Root-Template (index.html, _document.js, layout.tsx).",
@@ -1700,7 +1741,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         key: "twitter",
         label: "Twitter card",
         ok: !!twitterCard,
-        value: twitterCard ?? "—",
+        value: twitterCard ?? "-",
         advice: !twitterCard ? "Twitter-Card Meta-Tag fehlt." : undefined,
         howToFix:
           'Füge hinzu: <meta name="twitter:card" content="summary_large_image"> und ggf. twitter:title, twitter:image.',
@@ -1712,7 +1753,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         key: "favicon",
         label: "Favicon",
         ok: !!favicon,
-        value: favicon ?? "—",
+        value: favicon ?? "-",
         advice: !favicon ? "Kein Favicon gefunden." : undefined,
         howToFix:
           "Lege ein Favicon (z. B. /favicon.ico oder /favicon.svg) ab und verlinke es im <head>.",
@@ -1915,7 +1956,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         key: "cache",
         label: "Cache-Control Header",
         ok: !!headers["cache-control"] && !/no-store/i.test(headers["cache-control"]),
-        value: headers["cache-control"] ?? "—",
+        value: headers["cache-control"] ?? "-",
         advice: !headers["cache-control"]
           ? "Kein Cache-Control gesetzt."
           : /no-store/i.test(headers["cache-control"] ?? "")
@@ -1937,6 +1978,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
     const techNames = new Set(tech.map((t) => t.name));
     const techCategories = new Set(tech.map((t) => t.category));
     const hasConsentTool = techCategories.has("privacy");
+    const hasCookies = cookies.length > 0;
     const hasUsServices =
       techNames.has("Google Analytics") ||
       techNames.has("Meta Pixel (Facebook)") ||
@@ -1952,6 +1994,21 @@ export const analyzeSite = createServerFn({ method: "POST" })
       techNames.has("Hotjar") ||
       techNames.has("FullStory") ||
       techNames.has("LogRocket");
+    const hasTrackingScripts =
+      techCategories.has("analytics") ||
+      techCategories.has("ads") ||
+      techCategories.has("marketing") ||
+      techCategories.has("cdp");
+    const needsConsentTool = hasCookies || hasTrackingScripts || hasUsServices;
+    const isEcommerceSite =
+      techCategories.has("ecommerce") ||
+      techNames.has("Shopify") ||
+      techNames.has("WooCommerce") ||
+      techNames.has("Magento") ||
+      techNames.has(" Shopware") ||
+      techNames.has("BigCommerce") ||
+      techNames.has("PrestaShop") ||
+      techNames.has("OpenCart");
     const hasGoogleFonts = techNames.has("Google Fonts");
     const hasYouTube = techNames.has("YouTube Embed");
     const hasForm = /<form\b/i.test(html);
@@ -1987,12 +2044,14 @@ export const analyzeSite = createServerFn({ method: "POST" })
       {
         key: "cookie-consent",
         label: "Cookie-Consent-Tool erkannt (DSGVO/TDDDG)",
-        ok: hasConsentTool,
-        value: hasConsentTool ? "ja" : "nein",
-        advice: !hasConsentTool ? "Kein Cookie-Consent-Manager gefunden." : undefined,
-        howToFix: !hasConsentTool
-          ? "Integriere ein Consent-Tool (z. B. Usercentrics, Cookiebot, CookieYes, Osano) und blocke Marketing/Analytics-Skripte vor dem Einverständnis."
-          : undefined,
+        ok: !needsConsentTool || hasConsentTool,
+        value: !needsConsentTool ? "nicht nötig" : hasConsentTool ? "ja" : "nein",
+        advice:
+          needsConsentTool && !hasConsentTool ? "Kein Cookie-Consent-Manager gefunden." : undefined,
+        howToFix:
+          needsConsentTool && !hasConsentTool
+            ? "Integriere ein Consent-Tool (z. B. Usercentrics, Cookiebot, CookieYes, Osano) und blocke Marketing/Analytics-Skripte vor dem Einverständnis."
+            : undefined,
         location: "Wird meist als Script im <head> eingebunden; Konfiguration im Tool-Dashboard.",
         learnMore: "https://www.gesetze-im-internet.de/ttdsg/__25.html",
       },
@@ -2002,7 +2061,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         ok: hasImprint && hasPrivacy,
         value:
           `${hasImprint ? "Impressum" : ""}${hasImprint && hasPrivacy ? " + " : ""}${hasPrivacy ? "Datenschutz" : ""}` ||
-          "—",
+          "-",
         advice: !(hasImprint && hasPrivacy)
           ? "Pflichtseiten fehlen oder sind nicht verlinkt."
           : undefined,
@@ -2193,13 +2252,554 @@ export const analyzeSite = createServerFn({ method: "POST" })
         location: "Checkout-/Warenkorb-Template.",
         learnMore: "https://www.gesetze-im-internet.de/bgb/__312g.html",
       },
-    ];
+    ].filter((c) => {
+      const shopOnlyKeys = ["odr-link", "shop-terms", "cancellation-access", "button-solution"];
+      if (shopOnlyKeys.includes(c.key) && !isEcommerceSite) return false;
+      return true;
+    });
     const compliancePassed = complianceChecks.filter((c) => c.ok).length;
     const complianceScore = scoreFromChecks(compliancePassed, complianceChecks.length);
 
     const seoScore = scoreFromChecks(seoPassed, seoChecks.length);
     const secScore = scoreFromChecks(secPassed, securityHeaders.length);
-    const overall = Math.round((seoScore + secScore + perfScore + complianceScore) / 4);
+    // Mobile checks
+    const viewportMeta = viewport;
+    const hasViewport = !!viewportMeta;
+    const viewportResponsive =
+      hasViewport &&
+      /width\s*=\s*device-width/i.test(viewportMeta) &&
+      /initial-scale\s*=\s*1/i.test(viewportMeta);
+    const viewportBlocksZoom = hasViewport && /user-scalable\s*=\s*no/i.test(viewportMeta);
+    const hasMediaQueries =
+      /<style[^>]*>[^]*?@media\s+[^]*?<\/style>/i.test(html) ||
+      /<link[^>]*media\s*=\s*["'][^"']*\d+[^"']*["'][^>]*>/i.test(html) ||
+      /<style[^>]*>[^]*?@media\s*\(/i.test(html);
+    const hasResponsiveFramework =
+      techNames.has("Bootstrap") ||
+      techNames.has("Tailwind CSS") ||
+      techNames.has("Foundation") ||
+      techNames.has("Bulma") ||
+      techNames.has("Materialize") ||
+      techNames.has("Chakra UI") ||
+      techNames.has("MUI") ||
+      techNames.has("Ant Design") ||
+      techNames.has("shadcn/ui") ||
+      techNames.has("Responsive Web Design");
+    const smallClickable = [...html.matchAll(/<(a|button)\b[^>]*>/gi)].filter((m) => {
+      const tag = m[0];
+      const width = tag.match(/\bwidth\s*=\s*["']?(\d+)/i)?.[1];
+      const height = tag.match(/\bheight\s*=\s*["']?(\d+)/i)?.[1];
+      return (width && Number(width) < 44) || (height && Number(height) < 44) || false;
+    }).length;
+    const smallClickableRatio =
+      smallClickable / Math.max(1, [...html.matchAll(/<(a|button)\b/gi)].length);
+    const touchTargetsOk = smallClickableRatio < 0.3;
+    const mobileChecks: SeoCheck[] = [
+      {
+        key: "viewport",
+        label: "Viewport für Mobile gesetzt",
+        ok: hasViewport && viewportResponsive,
+        value: viewportMeta ?? "fehlt",
+        advice: !hasViewport
+          ? "Füge ein Viewport-Meta-Tag im <head> hinzu."
+          : !viewportResponsive
+            ? "Viewport sollte width=device-width und initial-scale=1 enthalten."
+            : undefined,
+        howToFix: !hasViewport
+          ? '<meta name="viewport" content="width=device-width, initial-scale=1">'
+          : !viewportResponsive
+            ? 'Setze den Viewport auf: <meta name="viewport" content="width=device-width, initial-scale=1">'
+            : undefined,
+        location: "<head> im HTML-Template.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTML/Viewport_meta_tag",
+      },
+      {
+        key: "viewport-zoom",
+        label: "Zoom nicht blockiert",
+        ok: !viewportBlocksZoom,
+        value: viewportBlocksZoom ? "blockiert" : "erlaubt",
+        advice: viewportBlocksZoom
+          ? "user-scalable=no behindert die Bedienbarkeit auf Mobilgeräten und für Screenreader."
+          : undefined,
+        howToFix: viewportBlocksZoom
+          ? 'Entferne user-scalable=no aus dem Viewport: <meta name="viewport" content="width=device-width, initial-scale=1">'
+          : undefined,
+        location: "<head> im HTML-Template.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTML/Viewport_meta_tag",
+      },
+      {
+        key: "responsive-css",
+        label: "Responsive CSS / Media Queries",
+        ok: hasMediaQueries || hasResponsiveFramework,
+        value: hasMediaQueries ? "Media Queries" : hasResponsiveFramework ? "Framework" : "fehlt",
+        advice:
+          !hasMediaQueries && !hasResponsiveFramework
+            ? "Keine responsiven CSS-Regeln oder Framework erkannt."
+            : undefined,
+        howToFix:
+          !hasMediaQueries && !hasResponsiveFramework
+            ? "Füge @media-Queries hinzu oder verwende ein responsives CSS-Framework wie Tailwind CSS / Bootstrap."
+            : undefined,
+        location: "CSS-Dateien oder <style>-Block im <head>.",
+        learnMore:
+          "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_media_queries/Using_media_queries",
+      },
+      {
+        key: "touch-targets",
+        label: "Touch-Targets ausreichend groß",
+        ok: touchTargetsOk,
+        value: `${Math.round((1 - smallClickableRatio) * 100)}% OK`,
+        advice: !touchTargetsOk ? "Viele klickbare Elemente sind kleiner als 44×44 px." : undefined,
+        howToFix: !touchTargetsOk
+          ? "Vergrößere Links und Buttons auf mindestens 44×44 px (min-height / min-width)."
+          : undefined,
+        location: "CSS-Dateien oder Component-Styles.",
+        learnMore: "https://www.w3.org/WAI/WCAG21/Understanding/target-size.html",
+      },
+      {
+        key: "mobile-frameworks",
+        label: "Mobile / Responsive Framework erkannt",
+        ok: hasResponsiveFramework,
+        value: hasResponsiveFramework ? "ja" : "nein",
+        advice: !hasResponsiveFramework
+          ? "Kein bekanntes responsives Framework erkannt."
+          : undefined,
+        howToFix: !hasResponsiveFramework
+          ? "Nutze ein responsives UI-Framework oder native CSS-Grid/Flexbox mit Media Queries."
+          : undefined,
+        location: "Projekt-Dependencies oder Theme.",
+        learnMore:
+          "https://developer.mozilla.org/en-US/docs/Learn/CSS/CSS_layout/Responsive_Design",
+      },
+    ];
+    const mobilePassed = mobileChecks.filter((c) => c.ok).length;
+    const mobileScore = scoreFromChecks(mobilePassed, mobileChecks.length);
+
+    // Business / UX checks (heuristic from HTML + CSS)
+    const hasTelLink = /href\s*=\s*["']tel:/i.test(html);
+    const hasMailtoLink = /href\s*=\s*["']mailto:/i.test(html);
+    const phoneMatches = html.match(/\+?[0-9][\d\s\-/()]{7,}[\d]/g) || [];
+    const hasPhoneNumber = phoneMatches.length > 0;
+    const emailMatches = html.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g) || [];
+    const hasEmail = emailMatches.length > 0;
+    const contactClickableOk = (!hasPhoneNumber || hasTelLink) && (!hasEmail || hasMailtoLink);
+
+    const fixedWidths = [
+      ...html.matchAll(/\bwidth\s*:\s*(\d+)px\s*;?/gi),
+      ...html.matchAll(/\bwidth\s*=\s*["']?(\d+)px?["']?/gi),
+    ].map((m) => Number(m[1]));
+    const wideFixedElements = fixedWidths.filter((w) => w > 420).length;
+    const fixedWidthRatio = wideFixedElements / Math.max(1, fixedWidths.length);
+    const layoutOverflowRisk = fixedWidthRatio < 0.3;
+
+    const styleBlock = html.match(/<style[^>]*>([\s\S]*?)<\/style>/gi) || [];
+    const allCss = styleBlock.join(" ");
+    const smallFontRules = [...allCss.matchAll(/font-size\s*:\s*(\d+)px/gi)].filter(
+      (m) => Number(m[1]) < 12,
+    ).length;
+    const fontSizeOk = smallFontRules === 0 || !hasViewport;
+
+    const imgWithoutMaxWidth = [...html.matchAll(/<img\b[^>]*>/gi)].filter((m) => {
+      const tag = m[0];
+      const hasStyleMaxWidth = /max-width\s*:\s*100%/i.test(tag);
+      const hasClassResponsive =
+        /class\s*=\s*["'][^"']*(?:w-full|img-fluid|responsive)[^"']*["']/i.test(tag);
+      const hasFixedWidth =
+        /\bwidth\s*=\s*["']?\d+["']?/i.test(tag) || /width\s*:\s*\d+px/i.test(tag);
+      return hasFixedWidth && !hasStyleMaxWidth && !hasClassResponsive;
+    }).length;
+    const allImgTags = [...html.matchAll(/<img\b/gi)].length;
+    const imgLayoutOk = allImgTags === 0 || imgWithoutMaxWidth / Math.max(1, allImgTags) < 0.3;
+
+    const popupCount = [
+      ...html.matchAll(/class\s*=\s*["'][^"']*(modal|popup|overlay|lightbox|dialog)[^"']*["']/gi),
+    ].length;
+    const popupOk = popupCount === 0 || popupCount < 3;
+
+    const hamburgerMenu =
+      /<button[^>]*class\s*=\s*["'][^"']*(?:hamburger|menu-toggle|navbar-toggler|nav-toggle)[^"']*["']/i.test(
+        html,
+      ) ||
+      /<div[^>]*class\s*=\s*["'][^"']*(?:hamburger|menu-icon|nav-icon)[^"']*["']/i.test(html) ||
+      /<svg[^>]*class\s*=\s*["'][^"']*(?:hamburger|menu)[^"']*["']/i.test(html);
+    const navLinks = [...html.matchAll(/<nav\b[^>]*>[\s\S]*?<a\b/gi)].length;
+    const mobileMenuOk = navLinks === 0 || navLinks < 10 || hamburgerMenu;
+
+    const cookieBanner =
+      /class\s*=\s*["'][^"']*(cookie-banner|cookie-consent|cookie-notice|gdpr-banner|cc-banner)[^"']*["']/i.test(
+        html,
+      ) ||
+      /id\s*=\s*["'][^"']*(cookie-banner|cookie-consent|cookie-notice|gdpr)[^"']*["']/i.test(
+        html,
+      ) ||
+      techCategories.has("privacy");
+    const cookieBannerFixed = /position\s*:\s*fixed/i.test(html);
+    const cookieBannerOk = !cookieBanner || cookieBannerFixed;
+
+    const formCount = [...html.matchAll(/<form\b/gi)].length;
+    const businessFormInputs = [...html.matchAll(/<(?:input|select|textarea)\b/gi)].length;
+    const formWithoutSubmit = [...html.matchAll(/<form\b/gi)].filter(
+      (m) => !/<button\b|<input\b[^>]*type\s*=\s*["']?(?:submit|button)/i.test(m[0]),
+    ).length;
+    const formsOk = formCount === 0 || formWithoutSubmit === 0;
+
+    const businessChecks: SeoCheck[] = [
+      {
+        key: "contact-clickable",
+        label: "Telefon & E-Mail anklickbar",
+        ok: contactClickableOk,
+        value: hasTelLink || hasMailtoLink ? "verlinkt" : "nur Text",
+        advice: !contactClickableOk
+          ? "Telefonnummern oder E-Mail-Adressen sind als reiner Text sichtbar, aber nicht anklickbar."
+          : undefined,
+        howToFix: !contactClickableOk
+          ? 'Nutze <a href="tel:+49123..."> und <a href="mailto:...">, damit Mobilgeräte direkt wählen/mailen können.'
+          : undefined,
+        location: "Header, Footer, Kontakt-Seite, Impressum.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/a",
+      },
+      {
+        key: "fixed-width",
+        label: "Festbreiten-Elemente überprüft",
+        ok: layoutOverflowRisk,
+        value: wideFixedElements > 0 ? `${wideFixedElements} > 420px` : "keine",
+        advice: !layoutOverflowRisk
+          ? "Viele Elemente haben feste Breiten > 420px – das kann auf Mobilgeräten horizontalen Scroll erzeugen."
+          : undefined,
+        howToFix: !layoutOverflowRisk
+          ? "Ersetze feste px-Breiten durch relative Werte (%, max-width: 100%, flex/grid) oder verwende Media Queries."
+          : undefined,
+        location: "CSS-Dateien oder <style>-Blöcke.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/CSS/max-width",
+      },
+      {
+        key: "font-size",
+        label: "Schrift auf Mobilgeräten lesbar",
+        ok: fontSizeOk,
+        value: smallFontRules > 0 ? `${smallFontRules} < 12px Regeln` : "ok",
+        advice: !fontSizeOk
+          ? "CSS enthält sehr kleine Font-Größen (< 12px), die auf Smartphones schwer lesbar sind."
+          : undefined,
+        howToFix: !fontSizeOk
+          ? "Setze mindestens 16px für Body-Text auf Mobilgeräten und verwende clamp()/rem."
+          : undefined,
+        location: "CSS-Dateien oder <style>-Blöcke.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/CSS/font-size",
+      },
+      {
+        key: "images-responsive",
+        label: "Bilder sprengen Layout nicht",
+        ok: imgLayoutOk,
+        value: imgWithoutMaxWidth > 0 ? `${imgWithoutMaxWidth} Bilder` : "ok",
+        advice: !imgLayoutOk
+          ? "Einige Bilder haben feste Breiten ohne max-width: 100% und können das Layout auf Mobilgeräten sprengen."
+          : undefined,
+        howToFix: !imgLayoutOk
+          ? "Füge allen Bildern max-width: 100%; height: auto; hinzu oder nutze responsive Bild-Klassen."
+          : undefined,
+        location: "CSS-Dateien oder <img>-Tags.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/CSS/max-width",
+      },
+      {
+        key: "popups",
+        label: "Pop-ups / Overlays nicht blockierend",
+        ok: popupOk,
+        value: popupCount > 0 ? `${popupCount} gefunden` : "keine",
+        advice: !popupOk
+          ? "Viele Pop-ups/Overlays können Formulare und Inhalte auf Mobilgeräten blockieren."
+          : undefined,
+        howToFix: !popupOk
+          ? "Reduziere Pop-ups auf Mobilgeräten, verschiebe sie in den Footer oder nutze dedizierte Seiten."
+          : undefined,
+        location: "Templates, Marketing-Scripts oder CMS-Plugins.",
+        learnMore: "https://web.dev/popups/",
+      },
+      {
+        key: "mobile-menu",
+        label: "Mobiles Menü erkennbar",
+        ok: mobileMenuOk,
+        value: hamburgerMenu ? "Hamburger-Menü" : navLinks > 0 ? "Desktop-Links" : "kein Menü",
+        advice: !mobileMenuOk
+          ? "Viele Navigationslinks ohne erkennbares Hamburger-Menü – auf Smartphones schnell unbrauchbar."
+          : undefined,
+        howToFix: !mobileMenuOk
+          ? "Füge ein responsives Hamburger-Menü ein, das auf kleinen Bildschirmen die Navigation klappt."
+          : undefined,
+        location: "Header-Template oder Navigations-Komponente.",
+        learnMore:
+          "https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_media_queries/Using_media_queries",
+      },
+      {
+        key: "cookie-banner",
+        label: "Cookie-Banner blockiert nicht dauerhaft",
+        ok: cookieBannerOk,
+        value: cookieBanner ? (cookieBannerFixed ? "fixed position" : "nicht fixed") : "keiner",
+        advice: !cookieBannerOk
+          ? "Cookie-Banner ist nicht fixed positioniert und könnte Inhalte verdecken oder unzugänglich sein."
+          : undefined,
+        howToFix: !cookieBannerOk
+          ? "Platziere den Cookie-Banner mit position: fixed am unteren oder oberen Rand und sorge für einen klaren Schließen-Button."
+          : undefined,
+        location: "Cookie-Consent-Script oder Template.",
+        learnMore: "https://www.gesetze-im-internet.de/ttdsg/__25.html",
+      },
+      {
+        key: "forms-usable",
+        label: "Formulare absendbar",
+        ok: formsOk,
+        value: formCount > 0 ? `${businessFormInputs} Felder` : "keine Formulare",
+        advice: !formsOk
+          ? "Formulare ohne erkennbaren Submit-Button sind für Nutzer nicht absendbar."
+          : undefined,
+        howToFix: !formsOk
+          ? 'Füge jedem Formular einen <button type="submit"> oder <input type="submit"> hinzu.'
+          : undefined,
+        location: "Formular-Templates oder CMS-Formular-Editor.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/form",
+      },
+    ];
+    const businessPassed = businessChecks.filter((c) => c.ok).length;
+    const businessScore = scoreFromChecks(businessPassed, businessChecks.length);
+
+    // WordPress-specific checks
+    const isWordPress =
+      techNames.has("WordPress") ||
+      /wp-content|wp-includes|wp-json|\/wp-admin/i.test(html) ||
+      /WordPress[ /]?(\d+\.\d+(\.\d+)?)/i.test(generator ?? "");
+    let wpChecks: SeoCheck[] = [];
+    let wpScore = 0;
+    if (isWordPress) {
+      const wpAdminUrl = new URL("/wp-admin/", finalUrl).toString();
+      const wpLoginUrl = new URL("/wp-login.php", finalUrl).toString();
+      const xmlRpcUrl = new URL("/xmlrpc.php", finalUrl).toString();
+      const restUsersUrl = new URL("/wp-json/wp/v2/users/", finalUrl).toString();
+      const [wpAdminRes, wpLoginRes, xmlRpcRes, restUsersRes] = await Promise.all([
+        fetchWithTimeout(wpAdminUrl, { method: "HEAD", redirect: "manual" }, 5000).catch(
+          () => ({ status: 0 }) as Response,
+        ),
+        fetchWithTimeout(wpLoginUrl, { method: "HEAD", redirect: "manual" }, 5000).catch(
+          () => ({ status: 0 }) as Response,
+        ),
+        fetchWithTimeout(xmlRpcUrl, { method: "HEAD", redirect: "manual" }, 5000).catch(
+          () => ({ status: 0 }) as Response,
+        ),
+        fetchWithTimeout(restUsersUrl, { method: "GET", redirect: "manual" }, 5000).catch(
+          () => ({ status: 0 }) as Response,
+        ),
+      ]);
+      const wpAdminReachable = wpAdminRes.status >= 200 && wpAdminRes.status < 400;
+      const wpLoginReachable = wpLoginRes.status >= 200 && wpLoginRes.status < 400;
+      const xmlRpcReachable = xmlRpcRes.status === 405 || xmlRpcRes.status === 200;
+      const restUsersReachable = restUsersRes.status === 200;
+
+      const wpPlugins = [
+        ...new Set(
+          [...html.matchAll(/\/wp-content\/plugins\/([^/]+)/gi)].map((m) => m[1].toLowerCase()),
+        ),
+      ];
+      const wpThemes = [
+        ...new Set(
+          [...html.matchAll(/\/wp-content\/themes\/([^/]+)/gi)].map((m) => m[1].toLowerCase()),
+        ),
+      ];
+      const activeTheme = wpThemes[0] ?? "unbekannt";
+
+      const cachePlugins = new Set([
+        "wp-rocket",
+        "w3-total-cache",
+        "wp-super-cache",
+        "litespeed-cache",
+        "wp-fastest-cache",
+        "autoptimize",
+        "breeze",
+        "sg-optimizer",
+        "swift-performance",
+        "perfmatters",
+        "flying-press",
+        "redis-cache",
+        "object-cache-pro",
+      ]);
+      const hasCachePlugin = wpPlugins.some((p) => cachePlugins.has(p));
+
+      const securityPlugins = new Set([
+        "wordfence",
+        "sucuri-scanner",
+        "all-in-one-wp-security-and-firewall",
+        "ithemes-security",
+        "bulletproof-security",
+        "cerber",
+      ]);
+      const hasSecurityPlugin = wpPlugins.some((p) => securityPlugins.has(p));
+
+      const pageBuilders = new Set([
+        "elementor",
+        "wpbakery",
+        "js_composer",
+        "divi-builder",
+        "brizy",
+        "beaver-builder",
+        "oxygen",
+        "breakdance",
+        "fl-builder",
+      ]);
+      const hasPageBuilder = wpPlugins.some((p) => pageBuilders.has(p));
+
+      const heavyPlugins = new Set([
+        "revslider",
+        "slider-revolution",
+        "contact-form-7",
+        "woocommerce",
+        "elementor-pro",
+        "divi-builder",
+        "wpbakery",
+        "js_composer",
+        "yoast-seo",
+        "all-in-one-seo-pack",
+        "elementor",
+      ]);
+      const heavyPluginCount = wpPlugins.filter((p) => heavyPlugins.has(p)).length;
+
+      const generatorLeak = /WordPress[ /]?(\d+\.\d+(\.\d+)?)/i.test(generator ?? "");
+
+      wpChecks = [
+        {
+          key: "wp-version-leak",
+          label: "WordPress-Version nicht öffentlich sichtbar",
+          ok: !generatorLeak,
+          value: generator ?? "kein Generator",
+          advice: generatorLeak
+            ? "Das Meta-Generator-Tag verrät die exakte WordPress-Version."
+            : undefined,
+          howToFix: generatorLeak
+            ? "Entferne das Generator-Meta-Tag über functions.php oder ein Security-Plugin."
+            : undefined,
+          location: "functions.php oder Security-Plugin.",
+          learnMore: "https://wordpress.org/documentation/article/hardening-wordpress/",
+        },
+        {
+          key: "wp-admin-hidden",
+          label: "wp-admin / wp-login nicht erreichbar",
+          ok: !wpAdminReachable && !wpLoginReachable,
+          value: wpAdminReachable || wpLoginReachable ? "erreichbar" : "verborgen",
+          advice:
+            wpAdminReachable || wpLoginReachable
+              ? "Login-Seite ist öffentlich erreichbar – erhöht Angriffsfläche."
+              : undefined,
+          howToFix:
+            wpAdminReachable || wpLoginReachable
+              ? "Beschränke /wp-admin per IP, .htaccess oder verwende eine Custom-Login-URL."
+              : undefined,
+          location: ".htaccess, Server-Konfiguration oder Security-Plugin.",
+          learnMore: "https://wordpress.org/documentation/article/hardening-wordpress/",
+        },
+        {
+          key: "wp-xmlrpc",
+          label: "XML-RPC deaktiviert oder blockiert",
+          ok: !xmlRpcReachable,
+          value: xmlRpcReachable ? "aktiv" : "blockiert",
+          advice: xmlRpcReachable
+            ? "XML-RPC kann für Brute-Force- und DDoS-Angriffe missbraucht werden."
+            : undefined,
+          howToFix: xmlRpcReachable
+            ? "Deaktiviere XML-RPC in .htaccess (Require all denied) oder über ein Plugin."
+            : undefined,
+          location: ".htaccess oder Security-Plugin.",
+          learnMore: "https://developer.wordpress.org/reference/functions/xmlrpc_enabled/",
+        },
+        {
+          key: "wp-rest-users",
+          label: "REST API User Enumeration blockiert",
+          ok: !restUsersReachable,
+          value: restUsersReachable ? "Benutzer auflistbar" : "blockiert",
+          advice: restUsersReachable
+            ? "/wp-json/wp/v2/users/ listet Benutzernamen auf – Angriffsfläche für Brute-Force."
+            : undefined,
+          howToFix: restUsersReachable
+            ? "Blockiere /wp-json/wp/v2/users/ per .htaccess oder mit einem Security-Plugin."
+            : undefined,
+          location: ".htaccess oder Security-Plugin.",
+          learnMore: "https://developer.wordpress.org/rest-api/reference/users/",
+        },
+        {
+          key: "wp-cache",
+          label: "Cache-Plugin erkannt",
+          ok: hasCachePlugin,
+          value: hasCachePlugin ? "ja" : "nein",
+          advice: !hasCachePlugin
+            ? "Kein Caching-Plugin erkannt – WordPress wird bei jedem Seitenaufruf neu gerendert."
+            : undefined,
+          howToFix: !hasCachePlugin
+            ? "Installiere WP Rocket, LiteSpeed Cache, W3 Total Cache oder WP Super Cache."
+            : undefined,
+          location: "WordPress-Plugins.",
+          learnMore: "https://wordpress.org/plugins/tags/performance/",
+        },
+        {
+          key: "wp-security-plugin",
+          label: "Security-Plugin erkannt",
+          ok: hasSecurityPlugin,
+          value: hasSecurityPlugin ? "ja" : "nein",
+          advice: !hasSecurityPlugin
+            ? "Kein dediziertes Security-Plugin erkannt – Login-Schutz und WAF fehlen."
+            : undefined,
+          howToFix: !hasSecurityPlugin
+            ? "Installiere Wordfence, iThemes Security oder Sucuri Scanner."
+            : undefined,
+          location: "WordPress-Plugins.",
+          learnMore: "https://wordpress.org/plugins/tags/security/",
+        },
+        {
+          key: "wp-pagebuilder",
+          label: "Page Builder Performance",
+          ok: !hasPageBuilder,
+          value: hasPageBuilder ? "erkannt" : "keiner",
+          advice: hasPageBuilder
+            ? "Page Builder (Elementor, WPBakery, Divi …) können die Ladezeit deutlich erhöhen."
+            : undefined,
+          howToFix: hasPageBuilder
+            ? "Nutze Caching, Asset-Optimierung (z.B. Perfmatters, WP Rocket), und prüfe, ob ein blockbasierter Editor ausreicht."
+            : undefined,
+          location: "WordPress-Plugins / Theme.",
+          learnMore: "https://web.dev/performance-scoring/",
+        },
+        {
+          key: "wp-plugins-heavy",
+          label: "Wenig performance-kritische Plugins",
+          ok: heavyPluginCount <= 2,
+          value: `${heavyPluginCount} erkannt`,
+          advice:
+            heavyPluginCount > 2
+              ? "Viele bekannte Performance-/Sicherheits-kritische Plugins gleichzeitig aktiv."
+              : undefined,
+          howToFix:
+            heavyPluginCount > 2
+              ? "Prüfe, ob alle Plugins wirklich nötig sind, und deaktiviere/ersetze unnötige."
+              : undefined,
+          location: "WordPress-Plugins.",
+          learnMore: "https://wordpress.org/documentation/article/optimization/",
+        },
+        {
+          key: "wp-theme-known",
+          label: "Theme erkannt",
+          ok: wpThemes.length > 0,
+          value: activeTheme,
+          advice: wpThemes.length === 0 ? "Kein Theme aus dem HTML erkannt." : undefined,
+          howToFix:
+            wpThemes.length === 0
+              ? "Stelle sicher, dass Theme-Assets aus /wp-content/themes/ geladen werden."
+              : undefined,
+          location: "/wp-content/themes/",
+          learnMore: "https://developer.wordpress.org/themes/",
+        },
+      ];
+      const wpPassed = wpChecks.filter((c) => c.ok).length;
+      wpScore = scoreFromChecks(wpPassed, wpChecks.length);
+    }
+
+    const overall = Math.round(
+      (seoScore + secScore + perfScore + complianceScore + mobileScore + businessScore + wpScore) /
+        7,
+    );
 
     const architecture = buildArchitecture(tech, headers, html);
     const socialHowTo = buildSocialHowTo(socials, tech);
@@ -2256,6 +2856,9 @@ export const analyzeSite = createServerFn({ method: "POST" })
         security: secScore,
         performance: perfScore,
         compliance: complianceScore,
+        mobile: mobileScore,
+        business: businessScore,
+        wordpress: wpScore,
         overall,
       },
       meta: {
@@ -2278,6 +2881,9 @@ export const analyzeSite = createServerFn({ method: "POST" })
       seoChecks,
       perfChecks,
       complianceChecks,
+      mobileChecks,
+      businessChecks,
+      wpChecks,
       headers,
       securityHeaders,
       cookies,

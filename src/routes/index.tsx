@@ -35,6 +35,15 @@ import {
   Phone,
   MapPin,
   Network,
+  Smartphone,
+  Tablet,
+  Monitor,
+  Store,
+  Puzzle,
+  Radar,
+  Heart,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { analyzeSite, type AnalyzeResult } from "@/lib/analyze.functions";
 import { Button } from "@/components/ui/button";
@@ -47,17 +56,17 @@ import { ConnectionsGraph, CATEGORY_META } from "@/components/ConnectionsGraph";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "SiteScope — Röntgenblick für jede Website" },
+      { title: "SiteScope - Röntgenblick für jede Website" },
       {
         name: "description",
         content:
-          "Analysiere jede Website: SEO, Sicherheit, Performance, Tech-Stack, Verbindungen und mehr — in einem Report.",
+          "Analysiere jede Website: SEO, Sicherheit, Performance, Tech-Stack, Verbindungen und mehr - in einem Report.",
       },
-      { property: "og:title", content: "SiteScope — Röntgenblick für jede Website" },
+      { property: "og:title", content: "SiteScope - Röntgenblick für jede Website" },
       {
         property: "og:description",
         content:
-          "Analysiere jede Website: SEO, Sicherheit, Performance, Tech-Stack, Verbindungen und mehr — in einem Report.",
+          "Analysiere jede Website: SEO, Sicherheit, Performance, Tech-Stack, Verbindungen und mehr - in einem Report.",
       },
     ],
     links: [{ rel: "canonical", href: "/" }],
@@ -76,26 +85,69 @@ function scoreRing(n: number) {
   return "from-rose-500/40 to-rose-500/0";
 }
 
+function playSuccessSound() {
+  if (typeof window === "undefined") return;
+  const AudioCtx =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioCtx) return;
+
+  const ctx = new AudioCtx();
+  const now = ctx.currentTime;
+  const duration = 1.8;
+
+  const master = ctx.createGain();
+  master.connect(ctx.destination);
+  master.gain.setValueAtTime(0, now);
+  master.gain.linearRampToValueAtTime(0.18, now + 0.08);
+  master.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+  const freqs = [523.25, 659.25]; // C5 + E5 (sanfter Dur-Akkord)
+  freqs.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = freq;
+    osc.connect(gain);
+    gain.connect(master);
+
+    const start = now + i * 0.08;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.5, start + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + duration - 0.2);
+
+    osc.start(start);
+    osc.stop(start + duration);
+  });
+
+  setTimeout(() => ctx.close(), duration * 1000 + 200);
+}
+
 function Home() {
   const [url, setUrl] = useState("");
   const fn = useServerFn(analyzeSite);
   const m = useMutation({
     mutationFn: (u: string) => fn({ data: { url: u } }),
+    onSuccess: () => playSuccessSound(),
   });
 
   return (
     <div className="min-h-screen bg-background text-foreground relative flex flex-col">
-      {/* Ambient background */}
-      <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 h-[500px] w-[900px] rounded-full bg-primary/15 blur-3xl" />
-        <div className="absolute bottom-0 right-0 h-[400px] w-[600px] rounded-full bg-accent/20 blur-3xl" />
-        <div className="absolute inset-0 opacity-[0.05] [background-image:linear-gradient(hsl(var(--foreground))_1px,transparent_1px),linear-gradient(90deg,hsl(var(--foreground))_1px,transparent_1px)] [background-size:40px_40px]" />
-      </div>
+      <TechBackground />
+
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 z-50 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+      >
+        Zum Hauptinhalt springen
+      </a>
 
       <header className="border-b border-border/60 backdrop-blur-md sticky top-0 z-40 bg-background/70">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3 font-semibold tracking-tight">
-            <img src="/logo.png" alt="SiteScope" className="h-10 w-auto" />
+            <div className="rounded-lg bg-emerald-500/15 p-2">
+              <Radar className="h-5 w-5 text-emerald-400" />
+            </div>
             <div className="flex flex-col leading-none">
               <span className="text-lg">SiteScope</span>
               <span className="text-[10px] text-muted-foreground tracking-wide">Tech-Radar</span>
@@ -115,18 +167,18 @@ function Home() {
         </div>
       </header>
 
-      <main className="flex-1 w-full max-w-7xl mx-auto px-6 py-10 sm:py-16">
+      <main id="main" className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-6 py-10 sm:py-16">
         {/* Hero + search */}
         <section className="text-center max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/50 px-3 py-1 text-xs text-muted-foreground mb-6">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Live-Analyse · SEO · Security · Tech-Radar
           </div>
-          <h1 className="text-4xl sm:text-6xl font-bold tracking-tight bg-gradient-to-b from-foreground to-foreground/60 bg-clip-text text-transparent">
+          <h1 className="text-4xl sm:text-6xl font-bold tracking-tight bg-linear-to-b from-foreground to-foreground/60 bg-clip-text text-transparent">
             Der Röntgenblick für jede Website
           </h1>
           <p className="mt-4 text-muted-foreground text-lg">
-            Gib eine URL ein — WordPress, React-App, klassische Homepage — und sieh den ganzen
+            Gib eine URL ein - WordPress, React-App, klassische Homepage - und sieh den ganzen
             Stack, alle Signale und Verbindungen.
           </p>
 
@@ -135,11 +187,16 @@ function Home() {
               e.preventDefault();
               if (url.trim()) m.mutate(url);
             }}
-            className="mt-8 flex flex-col sm:flex-row gap-2 max-w-2xl mx-auto"
+            className="mt-8 flex flex-col sm:flex-row gap-4 max-w-2xl mx-auto"
+            aria-label="Website-URL analysieren"
           >
             <div className="relative flex-1">
+              <label htmlFor="url-input" className="sr-only">
+                Website-URL
+              </label>
               <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
+                id="url-input"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="example.com oder https://…"
@@ -147,19 +204,7 @@ function Home() {
                 autoFocus
               />
             </div>
-            <Button
-              type="submit"
-              disabled={m.isPending || !url.trim()}
-              size="lg"
-              className="h-12 px-6 gap-2"
-            >
-              {m.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Search className="h-4 w-4" />
-              )}
-              {m.isPending ? "Scanne…" : "Analysieren"}
-            </Button>
+            <ScanButton pending={m.isPending} disabled={!url.trim()} />
           </form>
 
           <div className="mt-4 flex flex-wrap gap-2 justify-center text-xs text-muted-foreground">
@@ -191,32 +236,171 @@ function Home() {
         {m.data && <Results result={m.data} />}
       </main>
 
-      <footer className="border-t border-border/60 bg-card/30 backdrop-blur mt-auto">
-        <div className="max-w-7xl mx-auto px-6 py-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 text-xs text-muted-foreground">
-          <div className="space-y-1">
-            <div className="font-medium text-foreground">SiteScope</div>
-            <p>
-              Gebaut mit{" "}
-              <span className="text-foreground">
-                React + TypeScript + TanStack Start + Vite + Tailwind CSS
-              </span>
-              .
-            </p>
-            <p>
-              Frontend deploybar auf <span className="text-foreground">Vercel/Netlify</span>;
-              Server-Funktionen laufen als externer API-Server oder auf derselben Edge-Plattform.
-            </p>
+      <CollapsibleFooter />
+    </div>
+  );
+}
+
+function CollapsibleFooter() {
+  const [open, setOpen] = useState(false);
+  return (
+    <footer className="relative z-10 border-t border-border/60 bg-card/30 backdrop-blur mt-auto">
+      <div className="max-w-7xl mx-auto px-6">
+        {/* always visible compact row */}
+        <div className="py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg bg-emerald-500/15 p-2">
+              <Radar className="h-5 w-5 text-emerald-400" />
+            </div>
+            <div className="flex flex-col leading-none">
+              <span className="font-semibold text-foreground tracking-tight">SiteScope</span>
+              <span className="text-[10px] text-muted-foreground tracking-wide">Tech-Radar</span>
+            </div>
           </div>
-          <a
-            href="https://github.com/tanstack/tanstack-start"
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 text-primary hover:underline"
-          >
-            <Code className="h-3.5 w-3.5" /> TanStack Start Docs
-          </a>
+
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <a href="/impressum" className="hover:text-foreground transition-colors">
+              Impressum
+            </a>
+            <a href="/datenschutz" className="hover:text-foreground transition-colors">
+              Datenschutz
+            </a>
+            <a
+              href="https://github.com/tanstack/tanstack-start"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              <Code className="h-4 w-4" /> TanStack Start
+            </a>
+            <button
+              type="button"
+              onClick={() => setOpen((o) => !o)}
+              className="ml-2 inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-3 py-1 text-xs font-medium hover:bg-card transition-colors"
+              aria-label={open ? "Footer einklappen" : "Footer ausklappen"}
+            >
+              {open ? (
+                <>
+                  Weniger <ChevronUp className="h-3.5 w-3.5" />
+                </>
+              ) : (
+                <>
+                  Mehr <ChevronDown className="h-3.5 w-3.5" />
+                </>
+              )}
+            </button>
+          </div>
         </div>
-      </footer>
+
+        {/* expanded content */}
+        {open && (
+          <div className="pb-8 animate-in slide-in-from-top-2 duration-200">
+            <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+              <div className="space-y-3 max-w-xl">
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  SiteScope analysiert Websites in Sekunden. Von SEO und Performance über Security
+                  und Compliance bis hin zu Mobile, Business-Checks und WordPress - alles in einem
+                  übersichtlichen Dashboard.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    "SEO",
+                    "Security",
+                    "Performance",
+                    "Compliance",
+                    "Mobile",
+                    "Business",
+                    "WordPress",
+                  ].map((tag) => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center rounded-full border border-border/60 bg-background/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
+                <Heart className="h-4 w-4 text-rose-400" /> Für bessere Websites.
+              </span>
+            </div>
+
+            <div className="mt-6 pt-4 border-t border-border/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-muted-foreground">
+              <span>
+                © {new Date().getFullYear()} SiteScope. Gebaut mit{" "}
+                <span className="text-foreground">React + TypeScript + Tailwind CSS</span>.
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+    </footer>
+  );
+}
+
+function TechBackground() {
+  return (
+    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+      {/* base wash */}
+      <div className="absolute inset-0 bg-background" />
+
+      {/* clean line grid */}
+      <div
+        className="absolute inset-0 opacity-[0.10]"
+        style={{
+          backgroundImage:
+            "linear-gradient(hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)",
+          backgroundSize: "96px 96px",
+        }}
+      />
+
+      {/* very faint bottom fade */}
+      <div className="absolute inset-0 bg-linear-to-b from-background/0 via-background/0 to-background" />
+    </div>
+  );
+}
+
+function ScanButton({ pending, disabled }: { pending: boolean; disabled: boolean }) {
+  const isDisabled = Boolean(disabled || pending);
+  return (
+    <div className="relative sm:translate-x-1">
+      {/* outer ripple rings with glow */}
+      {pending && (
+        <>
+          <span
+            className="absolute inset-0 rounded-md ring-2 ring-primary/50 shadow-[0_0_16px] shadow-primary/40"
+            style={{ animation: "ripple 1.5s ease-out infinite" }}
+          />
+          <span
+            className="absolute inset-0 rounded-md ring-1 ring-primary/40"
+            style={{ animation: "ripple 1.5s ease-out infinite 0.35s" }}
+          />
+          <span
+            className="absolute inset-0 rounded-md ring-1 ring-primary/25"
+            style={{ animation: "ripple 1.5s ease-out infinite 0.7s" }}
+          />
+        </>
+      )}
+
+      <Button
+        type="submit"
+        disabled={isDisabled}
+        suppressHydrationWarning
+        size="lg"
+        className={`relative h-12 px-6 gap-2 ${pending ? "animate-pulse" : ""}`}
+      >
+        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+        {pending ? "Analysiere…" : "Analysieren"}
+      </Button>
+
+      <style>{`
+        @keyframes ripple {
+          0% { transform: scale(1); opacity: 0.75; }
+          100% { transform: scale(1.6); opacity: 0; }
+        }
+      `}</style>
     </div>
   );
 }
@@ -225,12 +409,12 @@ function Results({ result }: { result: AnalyzeResult }) {
   return (
     <section className="mt-12 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       {/* Top summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <ScoreCard
           label="Overall"
           value={result.score.overall}
           icon={<Gauge className="h-4 w-4" />}
-          tooltip="Durchschnitt aus SEO, Security, Performance und Compliance."
+          tooltip="Durchschnitt aus SEO, Security, Performance, Compliance, Mobile, Business und WordPress."
           improvements={[
             ...result.seoChecks
               .filter((c) => !c.ok)
@@ -322,6 +506,49 @@ function Results({ result }: { result: AnalyzeResult }) {
               learnMore: c.learnMore,
             }))}
         />
+        <ScoreCard
+          label="Mobile"
+          value={result.score.mobile}
+          icon={<Smartphone className="h-4 w-4" />}
+          tooltip="Prüft Viewport, Responsive-CSS, Zoom-Erlaubnis, Touch-Target-Größen und bekannte responsive Frameworks."
+          improvements={result.mobileChecks
+            .filter((c) => !c.ok)
+            .map((c) => ({
+              label: `${c.label}${c.advice ? `: ${c.advice}` : ""}`,
+              howToFix: c.howToFix,
+              location: c.location,
+              learnMore: c.learnMore,
+            }))}
+        />
+        <ScoreCard
+          label="Business"
+          value={result.score.business}
+          icon={<Store className="h-4 w-4" />}
+          tooltip="Prüft typische Business-/UX-Fehler: klickbare Kontakte, Layout-Überlappungen, lesbare Schrift, Pop-ups, Menü, Cookie-Banner und Formulare."
+          improvements={result.businessChecks
+            .filter((c) => !c.ok)
+            .map((c) => ({
+              label: `${c.label}${c.advice ? `: ${c.advice}` : ""}`,
+              howToFix: c.howToFix,
+              location: c.location,
+              learnMore: c.learnMore,
+            }))}
+        />
+        <ScoreCard
+          label="WordPress"
+          value={result.score.wordpress}
+          icon={<Puzzle className="h-4 w-4" />}
+          tooltip="WordPress-spezifische Security- und Performance-Checks. Deaktiviert, wenn keine WordPress-Installation erkannt wurde."
+          improvements={result.wpChecks
+            .filter((c) => !c.ok)
+            .map((c) => ({
+              label: `${c.label}${c.advice ? `: ${c.advice}` : ""}`,
+              howToFix: c.howToFix,
+              location: c.location,
+              learnMore: c.learnMore,
+            }))}
+          disabled={result.wpChecks.length === 0}
+        />
       </div>
 
       {/* URL bar */}
@@ -340,7 +567,7 @@ function Results({ result }: { result: AnalyzeResult }) {
             </div>
           )}
           <div className="min-w-0">
-            <div className="font-medium truncate">{result.meta.title ?? "—"}</div>
+            <div className="font-medium truncate">{result.meta.title ?? "-"}</div>
             <a
               href={result.finalUrl}
               target="_blank"
@@ -400,6 +627,26 @@ function Results({ result }: { result: AnalyzeResult }) {
           <TabsTrigger value="compliance" title="DSGVO/TDDDG und BITV 2.0 / Barrierefreiheit">
             Recht & BITV
           </TabsTrigger>
+          <TabsTrigger
+            value="mobile"
+            title="Mobile-Optimierung: Viewport, Responsive, Touch-Targets, Frameworks"
+          >
+            Mobile
+          </TabsTrigger>
+          <TabsTrigger
+            value="business"
+            title="Business-/UX-Checks: Kontakte, Layout, Pop-ups, Menü, Formulare"
+          >
+            Business
+          </TabsTrigger>
+          {result.wpChecks.length > 0 && (
+            <TabsTrigger
+              value="wordpress"
+              title="WordPress-spezifische Security- und Performance-Checks"
+            >
+              WordPress
+            </TabsTrigger>
+          )}
           <TabsTrigger value="raw" title="Alle HTTP Response-Header">
             Headers
           </TabsTrigger>
@@ -501,7 +748,7 @@ function Results({ result }: { result: AnalyzeResult }) {
             <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
               <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
               <span>
-                Tippe einen Check an, der rot ist — du siehst dann, wo du die Einstellung findest
+                Tippe einen Check an, der rot ist - du siehst dann, wo du die Einstellung findest
                 und wie du ihn behebst.
               </span>
             </div>
@@ -542,7 +789,7 @@ function Results({ result }: { result: AnalyzeResult }) {
                       <FlagBadge ok={c.secure}>Secure</FlagBadge>
                       <FlagBadge ok={c.httpOnly}>HttpOnly</FlagBadge>
                       <Badge variant="outline" className="text-[10px]">
-                        SameSite: {c.sameSite ?? "—"}
+                        SameSite: {c.sameSite ?? "-"}
                       </Badge>
                     </div>
                   </li>
@@ -630,6 +877,84 @@ function Results({ result }: { result: AnalyzeResult }) {
           </Panel>
         </TabsContent>
 
+        <TabsContent value="mobile">
+          <Panel title="Mobile-Optimierung" icon={<Smartphone className="h-4 w-4" />}>
+            <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
+              <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                Heuristische Prüfung auf Mobil-Tauglichkeit: Viewport, Responsive-CSS, Zoom,
+                Touch-Target-Größen und bekannte responsive Frameworks. Kein Ersatz für echte
+                Geräte-Tests.
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+              <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
+                <Smartphone className="h-5 w-5 mx-auto mb-1 text-emerald-400" />
+                <div className="text-xs text-muted-foreground">Smartphone</div>
+                <div className="text-sm font-medium">
+                  {result.mobileChecks.find((c) => c.key === "viewport")?.ok ? "bereit" : "prüfen"}
+                </div>
+              </div>
+              <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
+                <Tablet className="h-5 w-5 mx-auto mb-1 text-emerald-400" />
+                <div className="text-xs text-muted-foreground">Tablet</div>
+                <div className="text-sm font-medium">
+                  {result.mobileChecks.find((c) => c.key === "responsive-css")?.ok
+                    ? "bereit"
+                    : "prüfen"}
+                </div>
+              </div>
+              <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
+                <Monitor className="h-5 w-5 mx-auto mb-1 text-emerald-400" />
+                <div className="text-xs text-muted-foreground">Desktop</div>
+                <div className="text-sm font-medium">baseline</div>
+              </div>
+            </div>
+            <ul className="divide-y divide-border/50">
+              {result.mobileChecks.map((c) => (
+                <SeoCheckItem key={c.key} c={c} />
+              ))}
+            </ul>
+          </Panel>
+        </TabsContent>
+
+        <TabsContent value="business">
+          <Panel title="Business- & UX-Checks" icon={<Store className="h-4 w-4" />}>
+            <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
+              <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              <span>
+                Heuristische Prüfung typischer Business-/UX-Fehler aus dem HTML und Inline-CSS:
+                klickbare Kontakte, Layout-Überlappungen, lesbare Schrift, Pop-ups, mobiles Menü,
+                Cookie-Banner und absendbare Formulare. Kein Ersatz für echte UX-Tests.
+              </span>
+            </div>
+            <ul className="divide-y divide-border/50">
+              {result.businessChecks.map((c) => (
+                <SeoCheckItem key={c.key} c={c} />
+              ))}
+            </ul>
+          </Panel>
+        </TabsContent>
+
+        {result.wpChecks.length > 0 && (
+          <TabsContent value="wordpress">
+            <Panel title="WordPress-Checks" icon={<Puzzle className="h-4 w-4" />}>
+              <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
+                <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                <span>
+                  WordPress-spezifische Sicherheits- und Performance-Checks aus dem HTML und
+                  schnellen Endpunkt-Tests. Kein Ersatz für ein vollständiges WordPress-Audit.
+                </span>
+              </div>
+              <ul className="divide-y divide-border/50">
+                {result.wpChecks.map((c) => (
+                  <SeoCheckItem key={c.key} c={c} />
+                ))}
+              </ul>
+            </Panel>
+          </TabsContent>
+        )}
+
         <TabsContent value="raw">
           <Panel title="Response Headers" icon={<Cpu className="h-4 w-4" />}>
             <div className="grid gap-1 text-xs font-mono max-h-[600px] overflow-auto">
@@ -663,40 +988,48 @@ function ScoreCard({
   icon,
   tooltip,
   improvements = [],
+  disabled,
 }: {
   label: string;
   value: number;
   icon: React.ReactNode;
   tooltip?: string;
   improvements?: Improvement[] | string[];
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const hasImprovements = value < 100 && improvements.length > 0;
+  const hasImprovements = !disabled && value < 100 && improvements.length > 0;
   const items: Improvement[] = improvements.map((imp) =>
     typeof imp === "string" ? { label: imp } : imp,
   );
   return (
     <div
-      className="relative rounded-2xl border border-border/60 bg-card/60 backdrop-blur p-5 overflow-hidden"
+      className={`relative rounded-2xl border p-5 overflow-hidden ${
+        disabled ? "border-border/30 bg-muted/30" : "border-border/60 bg-card/60 backdrop-blur"
+      }`}
       title={tooltip}
     >
-      <div
-        className={`absolute -top-16 -right-16 h-40 w-40 rounded-full bg-gradient-to-br ${scoreRing(value)} blur-2xl`}
-      />
+      {!disabled && (
+        <div
+          className={`absolute -top-16 -right-16 h-40 w-40 rounded-full bg-linear-to-br ${scoreRing(value)} blur-2xl`}
+        />
+      )}
       <div className="flex items-center justify-between text-muted-foreground text-xs uppercase tracking-wider">
-        <span className="flex items-center gap-1.5">
+        <span className={`flex items-center gap-1.5 ${disabled ? "line-through opacity-50" : ""}`}>
           {icon}
           {label}
         </span>
-        {value === 100 && (
+        {!disabled && value === 100 && (
           <span className="text-emerald-400 normal-case tracking-normal">perfekt ✓</span>
         )}
       </div>
-      <div className={`mt-3 text-4xl font-bold tabular-nums ${scoreColor(value)}`}>
-        {value}
-        <span className="text-lg text-muted-foreground">/100</span>
+      <div
+        className={`mt-3 text-4xl font-bold tabular-nums ${disabled ? "text-muted-foreground/50" : scoreColor(value)}`}
+      >
+        {disabled ? "-" : value}
+        {!disabled && <span className="text-lg text-muted-foreground">/100</span>}
       </div>
-      <Progress value={value} className="mt-3 h-1.5" />
+      {!disabled && <Progress value={value} className="mt-3 h-1.5" />}
       {hasImprovements && (
         <>
           <button
@@ -778,8 +1111,8 @@ function MetaRow({ k, v }: { k: string; v: string | null }) {
   return (
     <div className="grid grid-cols-[110px_1fr] gap-3 py-2">
       <span className="text-xs text-muted-foreground uppercase tracking-wider">{k}</span>
-      <span className="text-sm break-words">
-        {v ? v : <span className="text-muted-foreground italic">—</span>}
+      <span className="text-sm wrap-break-word">
+        {v ? v : <span className="text-muted-foreground italic">-</span>}
       </span>
     </div>
   );
@@ -924,22 +1257,32 @@ function ArchitecturePanel({ result }: { result: AnalyzeResult }) {
       <Panel title="Erkannter Aufbau" icon={<Layers className="h-4 w-4" />}>
         <p className="text-sm text-muted-foreground leading-relaxed mb-4">{a.summary}</p>
         <div className="space-y-3">
-          {rows.map((r) => (
-            <div key={r.label} className="rounded-lg border border-border/50 bg-background/40 p-3">
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                {r.icon}
-                {r.label}
+          {rows.map((r) => {
+            const found = r.items.length > 0;
+            return (
+              <div
+                key={r.label}
+                className={`rounded-lg border bg-background/40 p-3 ${
+                  found
+                    ? "border-emerald-500/60 shadow-[0_0_16px_rgba(16,185,129,0.12)]"
+                    : "border-rose-500/60 shadow-[0_0_16px_rgba(244,63,94,0.12)]"
+                }`}
+              >
+                <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
+                  {r.icon}
+                  {r.label}
+                </div>
+                <div className="text-sm font-medium">
+                  {found ? (
+                    r.items.join(", ")
+                  ) : (
+                    <span className="text-muted-foreground italic">nicht erkannt</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">{r.help}</p>
               </div>
-              <div className="text-sm font-medium">
-                {r.items.length > 0 ? (
-                  r.items.join(", ")
-                ) : (
-                  <span className="text-muted-foreground italic">nicht erkannt</span>
-                )}
-              </div>
-              <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">{r.help}</p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </Panel>
 
@@ -960,7 +1303,7 @@ function ArchitecturePanel({ result }: { result: AnalyzeResult }) {
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
                 HTTP-Version
               </div>
-              <div className="text-sm font-mono">{result.http.version ?? "—"}</div>
+              <div className="text-sm font-mono">{result.http.version ?? "-"}</div>
             </div>
             <div className="rounded-lg border border-border/50 bg-background/40 p-3">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
@@ -1081,7 +1424,7 @@ function ArchitecturePanel({ result }: { result: AnalyzeResult }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-border/50 bg-background/40 p-3">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">IP</div>
-              <div className="text-sm font-mono">{result.hostingDetails.ip ?? "—"}</div>
+              <div className="text-sm font-mono">{result.hostingDetails.ip ?? "-"}</div>
             </div>
             <div className="rounded-lg border border-border/50 bg-background/40 p-3">
               <div className="text-xs uppercase tracking-wider text-muted-foreground mb-1">
@@ -1089,8 +1432,8 @@ function ArchitecturePanel({ result }: { result: AnalyzeResult }) {
               </div>
               <div className="text-sm">
                 {result.hostingDetails.country && result.hostingDetails.region
-                  ? `${result.hostingDetails.country} — ${result.hostingDetails.region}`
-                  : "—"}
+                  ? `${result.hostingDetails.country} - ${result.hostingDetails.region}`
+                  : "-"}
               </div>
             </div>
           </div>
@@ -1099,7 +1442,7 @@ function ArchitecturePanel({ result }: { result: AnalyzeResult }) {
               ISP / Organisation
             </div>
             <div className="text-sm">
-              {result.hostingDetails.isp ?? result.hostingDetails.org ?? "—"}
+              {result.hostingDetails.isp ?? result.hostingDetails.org ?? "-"}
             </div>
           </div>
           {result.hostingDetails.nameservers.length > 0 && (
@@ -1152,19 +1495,19 @@ function ArchitecturePanel({ result }: { result: AnalyzeResult }) {
                       <div className="text-sm font-medium">{bh.domain}</div>
                       <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
                         <div>
-                          IP: <span className="font-mono text-foreground">{bh.ip ?? "—"}</span>
+                          IP: <span className="font-mono text-foreground">{bh.ip ?? "-"}</span>
                         </div>
                         <div>
                           Land:{" "}
                           <span className="text-foreground">
-                            {bh.country ?? "—"}
-                            {bh.region ? ` — ${bh.region}` : ""}
+                            {bh.country ?? "-"}
+                            {bh.region ? ` - ${bh.region}` : ""}
                           </span>
                         </div>
                       </div>
                       <div className="text-xs text-muted-foreground">
                         ISP / Org:{" "}
-                        <span className="text-foreground">{bh.isp ?? bh.org ?? "—"}</span>
+                        <span className="text-foreground">{bh.isp ?? bh.org ?? "-"}</span>
                       </div>
                       {bh.nameservers.length > 0 && (
                         <div className="text-xs text-muted-foreground">

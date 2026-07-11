@@ -187,7 +187,7 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
       style: React.CSSProperties,
     ) {
       // rough size estimation based on label length and padding/fontSize
-      const charWidth = (typeof style.fontSize === "number" ? style.fontSize : 13) * 0.55;
+      const fontSize = typeof style.fontSize === "number" ? style.fontSize : 13;
       const padding =
         typeof style.padding === "string"
           ? style.padding
@@ -195,8 +195,10 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
               .map((p) => parseInt(p, 10) || 0)
               .reduce((a, b) => a + b, 0)
           : 28;
-      const width = Math.max(80, label.length * charWidth + padding + 20);
-      const height = (typeof style.fontSize === "number" ? style.fontSize : 13) + padding + 8;
+      // wider chars for uppercase/W, narrower for lowercase/i; use a weighted average
+      const avgCharWidth = fontSize * 0.62;
+      const width = Math.max(80, Math.ceil(label.length * avgCharWidth + padding + 24));
+      const height = Math.ceil(fontSize * 1.4 + padding + 8);
       simNodes.push({
         id,
         x,
@@ -258,7 +260,7 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
         source: "site",
         target: groupId,
         animated: true,
-        style: { stroke: groupMeta.color, strokeWidth: 2, opacity: 0.7 },
+        style: { stroke: groupMeta.color, strokeWidth: 3, opacity: 0.9 },
       });
     }
 
@@ -311,7 +313,7 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
         source: `group-${group}`,
         target: catId,
         animated: true,
-        style: { stroke: groupMeta.color, strokeDasharray: "4 4", opacity: 0.6 },
+        style: { stroke: groupMeta.color, strokeDasharray: "4 4", opacity: 0.8, strokeWidth: 2 },
       });
 
       const items = byCat.get(cat)!;
@@ -337,7 +339,7 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
           id: `e-${catId}-${id}`,
           source: catId,
           target: id,
-          style: { stroke: meta.color, strokeDasharray: "2 6", opacity: 0.7 },
+          style: { stroke: meta.color, strokeDasharray: "2 6", opacity: 0.85, strokeWidth: 1.5 },
           markerEnd: { type: MarkerType.ArrowClosed, color: meta.color },
         });
       });
@@ -378,7 +380,15 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
       id: n.id,
       position: { x: n.x, y: n.y },
       data: n.data,
-      style: n.style,
+      style: {
+        ...n.style,
+        whiteSpace: "nowrap",
+        textAlign: "center",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        maxWidth: n.width,
+        minWidth: Math.min(n.width, 80),
+      },
     }));
 
     return { nodes, edges };
@@ -423,7 +433,7 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
         minZoom={0.2}
       >
         <Background color="#334155" gap={24} size={1} />
-        <Controls className="!bg-[hsl(224_25%_10%)] !border-border/60 [&>button]:!bg-transparent [&>button]:!text-white [&>button]:!border-border/40" />
+        <Controls className="bg-[hsl(224_25%_10%)]! border-border/60! [&>button]:bg-transparent! [&>button]:text-white! [&>button]:border-border/40!" />
         <FlowPanel position="top-right">
           <button
             type="button"
