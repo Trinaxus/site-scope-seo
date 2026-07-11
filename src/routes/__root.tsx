@@ -83,7 +83,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content:
           "Analysiere jede Website: SEO, Sicherheit, Performance, Tech-Stack, Verbindungen und mehr - in einem Report.",
       },
-      { name: "author", content: "Lovable" },
+      { name: "author", content: "SiteScope" },
       { property: "og:title", content: "SiteScope - Röntgenblick für jede Website" },
       {
         property: "og:description",
@@ -92,22 +92,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:site", content: "@SiteScope" },
       { name: "twitter:title", content: "SiteScope - Röntgenblick für jede Website" },
       {
         name: "twitter:description",
         content:
           "Analysiere jede Website: SEO, Sicherheit, Performance, Tech-Stack, Verbindungen und mehr - in einem Report.",
-      },
-      {
-        property: "og:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ca8b0b77-55f1-4d2d-8bfe-5c3ec2a4e7cb/id-preview-e5d2befd--e048d37c-8f73-40b1-ac1f-92cbcf437218.lovable.app-1783597610395.png",
-      },
-      {
-        name: "twitter:image",
-        content:
-          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/ca8b0b77-55f1-4d2d-8bfe-5c3ec2a4e7cb/id-preview-e5d2befd--e048d37c-8f73-40b1-ac1f-92cbcf437218.lovable.app-1783597610395.png",
       },
     ],
     links: [
