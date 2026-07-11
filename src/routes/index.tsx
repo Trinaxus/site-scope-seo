@@ -145,7 +145,7 @@ function Home() {
         Zum Hauptinhalt springen
       </a>
 
-      <header className="border-b border-border/60 backdrop-blur-md fixed top-0 left-0 right-0 z-40 bg-background/80">
+      <header className="border-b border-border/60 backdrop-blur-md fixed top-0 left-0 right-0 z-40 bg-background/85">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3 font-semibold tracking-tight">
             <div className="rounded-lg bg-emerald-500/15 p-2">
@@ -170,7 +170,7 @@ function Home() {
         </div>
       </header>
 
-      <main id="main" className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-6 pt-28 pb-16">
+      <main id="main" className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 pt-20 sm:pt-24 pb-16">
         {/* Hero + search */}
         <section className="text-center max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/50 px-3 py-1 text-xs text-muted-foreground mb-6">
@@ -247,52 +247,49 @@ function Home() {
 function CollapsibleFooter() {
   const [open, setOpen] = useState(false);
   return (
-    <footer className="relative z-10 border-t border-border/60 bg-card/30 backdrop-blur mt-auto">
-      <div className="max-w-7xl mx-auto px-6">
-        {/* always visible compact row */}
-        <div className="py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-emerald-500/15 p-2">
-              <Radar className="h-5 w-5 text-emerald-400" />
+    <footer className="relative z-10 border-t border-border/60 bg-card/40 backdrop-blur-md mt-auto">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        {/* single compact row — always visible */}
+        <div className="py-3 flex items-center justify-between gap-2 flex-wrap">
+          {/* Left: Logo */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="rounded-md bg-emerald-500/15 p-1.5">
+              <Radar className="h-4 w-4 text-emerald-400" />
             </div>
-            <div className="flex flex-col leading-none">
-              <span className="font-semibold text-foreground tracking-tight">SiteScope</span>
-              <span className="text-[10px] text-muted-foreground tracking-wide">Tech-Radar</span>
-            </div>
+            <span className="font-semibold text-foreground tracking-tight text-sm">SiteScope</span>
+            <span className="text-[10px] text-muted-foreground hidden sm:inline">· Tech-Radar</span>
           </div>
 
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <a href="/impressum" className="hover:text-foreground transition-colors">
+          {/* Center: Links */}
+          <div className="flex items-center gap-4">
+            <a href="/impressum" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
               Impressum
             </a>
-            <a href="/datenschutz" className="hover:text-foreground transition-colors">
+            <a href="/datenschutz" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
               Datenschutz
             </a>
-            <a
-              href="https://github.com/tanstack/tanstack-start"
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-primary hover:underline"
-            >
-              <Code className="h-4 w-4" /> TanStack Start
-            </a>
-            <button
-              type="button"
-              onClick={() => setOpen((o) => !o)}
-              className="ml-2 inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-3 py-1 text-xs font-medium hover:bg-card transition-colors"
-              aria-label={open ? "Footer einklappen" : "Footer ausklappen"}
-            >
-              {open ? (
-                <>
-                  Weniger <ChevronUp className="h-3.5 w-3.5" />
-                </>
-              ) : (
-                <>
-                  Mehr <ChevronDown className="h-3.5 w-3.5" />
-                </>
-              )}
-            </button>
+            <span className="text-xs text-muted-foreground/50 hidden sm:inline">
+              © {new Date().getFullYear()} SiteScope
+            </span>
           </div>
+
+          {/* Right: Mehr-Button */}
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-3 py-1 text-xs font-medium hover:bg-card transition-colors shrink-0"
+            aria-label={open ? "Footer einklappen" : "Footer ausklappen"}
+          >
+            {open ? (
+              <>
+                Weniger <ChevronUp className="h-3.5 w-3.5" />
+              </>
+            ) : (
+              <>
+                Mehr <ChevronDown className="h-3.5 w-3.5" />
+              </>
+            )}
+          </button>
         </div>
 
         {/* expanded content */}
@@ -353,8 +350,6 @@ function TechBackground() {
     if (!ctx) return;
 
     let animId: number;
-    const COLS = 40;
-    const ROWS = 22;
     let W = 0;
     let H = 0;
 
@@ -368,6 +363,13 @@ function TechBackground() {
     const draw = (t: number) => {
       ctx.clearRect(0, 0, W, H);
 
+      const mobile = W < 768;
+      const COLS = mobile ? 16 : 40;
+      const ROWS = mobile ? 10 : 22;
+      const waveAmp1 = mobile ? 10 : 28;
+      const waveAmp2 = mobile ? 6 : 16;
+      const waveRange = (waveAmp1 + waveAmp2) * 2;
+
       const colGap = W / (COLS - 1);
       const rowGap = H / (ROWS - 1);
 
@@ -377,12 +379,12 @@ function TechBackground() {
           const baseY = r * rowGap;
 
           // wave displacement: two overlapping sine waves
-          const wave1 = Math.sin(c * 0.35 + t * 0.0007 + r * 0.2) * 28;
-          const wave2 = Math.sin(c * 0.18 - t * 0.0005 + r * 0.3) * 16;
+          const wave1 = Math.sin(c * 0.35 + t * 0.0007 + r * 0.2) * waveAmp1;
+          const wave2 = Math.sin(c * 0.18 - t * 0.0005 + r * 0.3) * waveAmp2;
           const y = baseY + wave1 + wave2;
 
           // brightness based on wave height: norm 0..1 (0=trough, 1=crest)
-          const norm = (wave1 + wave2 + 44) / 88;
+          const norm = (wave1 + wave2 + waveRange / 2) / waveRange;
           const alpha = 0.12 + norm * 0.6;
           const radius = 0.8 + norm * 1.4;
 
