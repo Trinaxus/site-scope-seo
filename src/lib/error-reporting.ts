@@ -1,4 +1,4 @@
-export function reportLovableError(error: unknown, _context: Record<string, unknown> = {}) {
+export function reportError(error: unknown, _context: Record<string, unknown> = {}) {
   if (typeof window === "undefined") return;
   console.error("[SiteScope] Error boundary caught:", error);
 }
