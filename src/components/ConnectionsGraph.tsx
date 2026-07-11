@@ -9,9 +9,11 @@ import {
   type Node,
   type Edge,
   MarkerType,
+  Handle,
+  Position,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Maximize2, Minimize2 } from "lucide-react";
+import { Maximize2, Minimize2, Lock, Unlock } from "lucide-react";
 import {
   forceSimulation,
   forceManyBody,
@@ -153,6 +155,30 @@ const CATEGORY_META: Record<TechCategory, { label: string; color: string; ring: 
   misc: { label: "Other", color: "#cbd5e1", ring: "rgba(203,213,225,.35)" },
 };
 
+function SiteNode({ data }: { data: { label: string; favicon?: string | null } }) {
+  return (
+    <div className="flex flex-col items-center gap-2 relative">
+      <Handle type="target" position={Position.Top} className="bg-transparent! border-0!" />
+      {data.favicon ? (
+        <img
+          src={data.favicon}
+          alt=""
+          className="h-10 w-10 rounded-full border-2 border-white/25 bg-white/10 object-contain"
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).style.display = "none";
+          }}
+        />
+      ) : (
+        <div className="h-10 w-10 rounded-full border-2 border-white/25 bg-white/10 flex items-center justify-center text-xs font-bold text-white">
+          {data.label.slice(0, 2).toUpperCase()}
+        </div>
+      )}
+      <div className="text-white text-sm font-semibold whitespace-nowrap">{data.label}</div>
+      <Handle type="source" position={Position.Bottom} className="bg-transparent! border-0!" />
+    </div>
+  );
+}
+
 function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
   const { nodes, edges } = useMemo(() => {
     let host = "";
@@ -172,7 +198,7 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
       height: number;
       group: Group;
       style: React.CSSProperties;
-      data: { label: string };
+      data: { label: string; favicon?: string | null };
     };
 
     const simNodes: SimNode[] = [];
@@ -185,6 +211,7 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
       label: string,
       group: Group,
       style: React.CSSProperties,
+      favicon?: string | null,
     ) {
       // rough size estimation based on label length and padding/fontSize
       const fontSize = typeof style.fontSize === "number" ? style.fontSize : 13;
@@ -207,22 +234,38 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
         height,
         group,
         style,
-        data: { label },
+        data: { label, favicon },
       });
       return id;
     }
 
     // Center site node (homepage)
-    pushNode("site", 0, 0, host, "platform", {
-      background: "linear-gradient(135deg,#0ea5e9,#8b5cf6)",
-      color: "white",
-      border: "2px solid rgba(255,255,255,0.25)",
-      boxShadow: "0 0 40px rgba(139,92,246,0.5)",
-      borderRadius: 999,
-      padding: "22px 30px",
-      fontWeight: 800,
-      fontSize: 15,
-    });
+    let faviconUrl = result.meta.favicon;
+    if (faviconUrl && !faviconUrl.startsWith("http") && !faviconUrl.startsWith("//")) {
+      try {
+        faviconUrl = new URL(faviconUrl, result.finalUrl).toString();
+      } catch {
+        faviconUrl = null;
+      }
+    }
+    pushNode(
+      "site",
+      0,
+      0,
+      host,
+      "platform",
+      {
+        background: "linear-gradient(135deg,#0ea5e9,#8b5cf6)",
+        color: "white",
+        border: "2px solid rgba(255,255,255,0.25)",
+        boxShadow: "0 0 40px rgba(139,92,246,0.5)",
+        borderRadius: 999,
+        padding: "22px 30px",
+        fontWeight: 800,
+        fontSize: 15,
+      },
+      faviconUrl,
+    );
 
     // Group tech by category
     const byCat = new Map<TechCategory, typeof result.tech>();
@@ -378,6 +421,7 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
 
     const nodes: Node[] = simNodes.map((n) => ({
       id: n.id,
+      type: n.id === "site" ? "site" : undefined,
       position: { x: n.x, y: n.y },
       data: n.data,
       style: {
@@ -396,6 +440,7 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFs, setIsFs] = useState(false);
+  const [locked, setLocked] = useState(true);
   const { fitView } = useReactFlow();
 
   useEffect(() => {
@@ -420,26 +465,36 @@ function ConnectionsGraphInner({ result }: { result: AnalyzeResult }) {
   return (
     <div
       ref={containerRef}
-      className={`${isFs ? "h-screen" : "h-[600px]"} w-full rounded-2xl border border-border/60 bg-[hsl(224_25%_6%)] overflow-hidden relative`}
+      className={`${isFs ? "h-screen" : "h-[600px]"} w-full rounded-2xl border border-border/60 bg-[hsl(222_47%_11%)] overflow-hidden relative`}
     >
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        nodeTypes={{ site: SiteNode }}
         fitView
         fitViewOptions={{ padding: 0.2 }}
         proOptions={{ hideAttribution: true }}
-        nodesDraggable
+        nodesDraggable={!locked}
         panOnScroll
         minZoom={0.2}
       >
-        <Background color="#334155" gap={24} size={1} />
-        <Controls className="bg-[hsl(224_25%_10%)]! border-border/60! [&>button]:bg-transparent! [&>button]:text-white! [&>button]:border-border/40!" />
-        <FlowPanel position="top-right">
+        <Background color="rgba(255,255,255,0.08)" gap={24} size={1} />
+        <Controls className="bg-[hsl(222_47%_13%)]! border-border/60! [&>button]:bg-transparent! [&>button]:text-white! [&>button]:border-border/40!" />
+        <FlowPanel position="top-right" className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setLocked((l) => !l)}
+            title={locked ? "Knoten entsperren" : "Knoten sperren"}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-[hsl(222_47%_13%)]/90 backdrop-blur px-3 py-1.5 text-xs text-white hover:bg-[hsl(222_47%_17%)] transition"
+          >
+            {locked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
+            {locked ? "Gesperrt" : "Beweglich"}
+          </button>
           <button
             type="button"
             onClick={toggleFullscreen}
             title={isFs ? "Fullscreen verlassen (Esc)" : "Fullscreen aktivieren"}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-[hsl(224_25%_10%)]/90 backdrop-blur px-3 py-1.5 text-xs text-white hover:bg-[hsl(224_25%_14%)] transition"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-[hsl(222_47%_13%)]/90 backdrop-blur px-3 py-1.5 text-xs text-white hover:bg-[hsl(222_47%_17%)] transition"
           >
             {isFs ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             {isFs ? "Verkleinern" : "Fullscreen"}

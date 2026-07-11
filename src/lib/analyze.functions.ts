@@ -109,7 +109,13 @@ export interface AnalyzeResult {
   wpChecks: SeoCheck[];
   headers: Record<string, string>;
   securityHeaders: SecurityHeader[];
-  cookies: { name: string; secure: boolean; httpOnly: boolean; sameSite: string | null }[];
+  cookies: {
+    name: string;
+    secure: boolean;
+    httpOnly: boolean;
+    sameSite: string | null;
+    category: "necessary" | "analytics" | "marketing" | "third-party" | "unknown";
+  }[];
   robots: { found: boolean; disallowAll: boolean; sitemaps: string[]; raw?: string };
   sitemap: { found: boolean; urls: number; url?: string };
   tech: TechHit[];
@@ -255,56 +261,81 @@ async function checkHttpProtocols(url: string, warnings: string[]): Promise<Anal
 
   const http2Promise = checkHttp2Directly(url);
 
-  const httpsPromise = new Promise<AnalyzeResult["http"]>((resolve) => {
-    const options: https.RequestOptions & { ALPNProtocols?: string[] } = {
-      hostname: target.hostname,
-      servername: target.hostname,
-      port: 443,
-      path: target.pathname + target.search,
-      method: "GET",
-      headers: {
-        "user-agent":
-          "Mozilla/5.0 (compatible; SiteScopeBot/1.0; +https://sitescope.app) Chrome/120",
-        accept: "*/*",
-      },
-      ALPNProtocols: ["h2", "http/1.1"],
-      timeout: 15000,
-    };
-    const req = https.request(options, (res) => {
-      res.resume(); // consume body so connection can close cleanly
-      const altSvc = res.headers["alt-svc"] || null;
-      const serverHeader = res.headers["server"];
-      const server =
-        typeof serverHeader === "string"
-          ? serverHeader
-          : Array.isArray(serverHeader)
-            ? serverHeader[0]
-            : null;
-      const version = res.httpVersion || null;
-      console.log(
-        `[checkHttpProtocols] ${url} -> status=${res.statusCode} version=${version} alt-svc=${altSvc} server=${server}`,
-      );
-      resolve({
-        version,
-        supportsHttp2: version === "2.0",
-        supportsHttp3: typeof altSvc === "string" && altSvc.includes("h3="),
-        altSvc,
-        server,
-      });
-    });
+  type HttpCheckResult = AnalyzeResult["http"] & { error?: string };
 
-    req.on("error", (err) => {
-      console.log(`[checkHttpProtocols] ERROR ${url}: ${err.message}`);
-      warnings.push(`HTTP-Protokoll-Check fehlgeschlagen: ${err.message}`);
-      resolve(defaultResult);
+  const requestOnce = (
+    alpn: string[] | undefined,
+    method: "GET" | "HEAD" = "GET",
+  ): Promise<HttpCheckResult> => {
+    return new Promise<HttpCheckResult>((resolve) => {
+      const options: https.RequestOptions & { ALPNProtocols?: string[] } = {
+        hostname: target.hostname,
+        servername: target.hostname,
+        port: 443,
+        path: target.pathname + target.search,
+        method,
+        headers: {
+          "user-agent":
+            "Mozilla/5.0 (compatible; SiteScopeBot/1.0; +https://sitescope.app) Chrome/120",
+          accept: "*/*",
+        },
+        ALPNProtocols: alpn,
+        timeout: 15000,
+      };
+      const req = https.request(options, (res) => {
+        res.resume(); // consume body so connection can close cleanly
+        const altSvc = res.headers["alt-svc"] || null;
+        const serverHeader = res.headers["server"];
+        const server =
+          typeof serverHeader === "string"
+            ? serverHeader
+            : Array.isArray(serverHeader)
+              ? serverHeader[0]
+              : null;
+        const version = res.httpVersion || null;
+        console.log(
+          `[checkHttpProtocols] ${url} -> status=${res.statusCode} version=${version} alt-svc=${altSvc} server=${server}`,
+        );
+        resolve({
+          version,
+          supportsHttp2: version === "2.0",
+          supportsHttp3: typeof altSvc === "string" && altSvc.includes("h3="),
+          altSvc,
+          server,
+        });
+      });
+
+      req.on("error", (err) => {
+        console.log(
+          `[checkHttpProtocols] ERROR ${url} ALPN=${alpn?.join(",") ?? "none"}: ${err.message}`,
+        );
+        resolve({ ...defaultResult, error: err.message });
+      });
+      req.on("timeout", () => {
+        console.log(`[checkHttpProtocols] TIMEOUT ${url}`);
+        req.destroy();
+        resolve({ ...defaultResult, error: "timeout" });
+      });
+      req.end();
     });
-    req.on("timeout", () => {
-      console.log(`[checkHttpProtocols] TIMEOUT ${url}`);
-      warnings.push("HTTP-Protokoll-Check: Zeitüberschreitung");
-      req.destroy();
-      resolve(defaultResult);
+  };
+
+  const httpsPromise = new Promise<AnalyzeResult["http"]>((resolve) => {
+    requestOnce(["h2", "http/1.1"]).then((first: HttpCheckResult) => {
+      if (first.error) {
+        // Retry with HTTP/1.1 only and HEAD request to avoid hanging sockets.
+        requestOnce(["http/1.1"], "HEAD").then((second: HttpCheckResult) => {
+          if (second.error) {
+            warnings.push(`HTTP-Protokoll-Check fehlgeschlagen: ${first.error}`);
+            resolve(defaultResult);
+          } else {
+            resolve(second);
+          }
+        });
+      } else {
+        resolve(first);
+      }
     });
-    req.end();
   });
 
   const [httpsResult, http2Result] = await Promise.all([httpsPromise, http2Promise]);
@@ -712,13 +743,22 @@ const FINGERPRINTS: Fingerprint[] = [
 
   // Consent / Privacy
   { name: "OneTrust", category: "privacy", html: [/onetrust|cookielaw\.org/] },
-  { name: "Cookiebot", category: "privacy", html: [/consent\.cookiebot\.com/] },
+  { name: "Cookiebot", category: "privacy", html: [/consent\.cookiebot\.com|cookiebot/] },
   { name: "Usercentrics", category: "privacy", html: [/usercentrics\.eu|app\.usercentrics/] },
-  { name: "Iubenda", category: "privacy", html: [/iubenda\.com/] },
-  { name: "CookieYes", category: "privacy", html: [/cookieyes\.com|cky-consent/] },
+  { name: "Iubenda", category: "privacy", html: [/iubenda\.com|iubenda-cs/] },
+  { name: "CookieYes", category: "privacy", html: [/cookieyes\.com|cky-consent|cky-banner/] },
   { name: "Osano", category: "privacy", html: [/osano\.com|osano-compliance/] },
   { name: "Termly", category: "privacy", html: [/termly\.io|termly-consent/] },
   { name: "Traffict", category: "privacy", html: [/traffict\.digital|traffict-consent/] },
+  { name: "Borlabs Cookie", category: "privacy", html: [/borlabs\.io|borlabs-cookie/] },
+  { name: "Klaro", category: "privacy", html: [/klaro\.js|klaro-config/] },
+  { name: "Quantcast Choice", category: "privacy", html: [/quantcast\.mgr|quantcast\.choice/] },
+  { name: "TrustArc", category: "privacy", html: [/trustarc\.com|truste\.com/] },
+  { name: "Sourcepoint", category: "privacy", html: [/sourcepoint|cmp\.sourcepoint/] },
+  { name: "Didomi", category: "privacy", html: [/didomi\.io|didomi-consent/] },
+  { name: "Axeptio", category: "privacy", html: [/axeptio\.io|axeptio/] },
+  { name: "Piwik PRO", category: "privacy", html: [/piwik\.pro\/consent|ppms_cm/] },
+  { name: " consentmanager", category: "privacy", html: [/consentmanager\.net|cmp-consent/] },
 
   // Security / Captchas
   { name: "reCAPTCHA", category: "security", html: [/google\.com\/recaptcha/] },
@@ -1401,6 +1441,108 @@ export const analyzeSite = createServerFn({ method: "POST" })
       .getSetCookie;
     if (typeof getSetCookie === "function") setCookies.push(...getSetCookie.call(response.headers));
     else if (headers["set-cookie"]) setCookies.push(headers["set-cookie"]);
+    function categorizeCookie(name: string): AnalyzeResult["cookies"][number]["category"] {
+      const n = name.toLowerCase();
+      const necessary = [
+        "session",
+        "sess",
+        "csrf",
+        "xsrf",
+        "token",
+        "auth",
+        "login",
+        "sid",
+        "phpsessid",
+        "jsessionid",
+        "asp.net_sessionid",
+        "laravel_session",
+        "wordpress_logged_in",
+        "wp-settings",
+        "woocommerce_cart",
+        "woocommerce_sessions",
+        "cart",
+        "basket",
+        "consent",
+        "cookieconsent",
+        "cookieyes",
+        "cky",
+        "usprivacy",
+        "optanon",
+        "eupubconsent",
+        "pubconsent",
+      ];
+      const analytics = [
+        "_ga",
+        "_gid",
+        "_gat",
+        "_dc_gtm",
+        "_gac",
+        "_utm",
+        "__utma",
+        "__utmb",
+        "__utmc",
+        "__utmz",
+        "__utmv",
+        "_pk_id",
+        "_pk_ses",
+        "_hj",
+        "hotjar",
+        "_clck",
+        "_clsk",
+        "_fbp",
+        "_sc",
+        "_ss",
+        "_tla",
+        "_tq_id",
+        "amplitude",
+        "segment",
+        "mp_",
+        "mixpanel",
+        "pendo",
+        "fullstory",
+        "logrocket",
+        "bugsnag",
+        "sentry",
+      ];
+      const marketing = [
+        "_fbp",
+        "fr",
+        "tr",
+        "_gcl_au",
+        "_gcl_aw",
+        "_gcl_dc",
+        "_uetsid",
+        "_uetvid",
+        "_pin_",
+        "_derived_epik",
+        "_rdc_",
+        "_scid",
+        "_ssclid",
+        "li_ads",
+        "liap",
+        "lidc",
+        "bcookie",
+        "bscookie",
+        " personalization_id",
+        "guest_id",
+        "muc_ads",
+        "ads",
+        "doubleclick",
+        "__adroll",
+        "_cq_",
+        "_hp2_",
+        "hubspotutk",
+        "hs_c2l",
+        "msg_",
+        "opt_",
+      ];
+      if (necessary.some((k) => n.includes(k))) return "necessary";
+      if (analytics.some((k) => n.includes(k))) return "analytics";
+      if (marketing.some((k) => n.includes(k))) return "marketing";
+      if (n.includes("_") && (n.startsWith("_") || n.includes("_"))) return "third-party";
+      return "unknown";
+    }
+
     const cookies = setCookies.map((c) => {
       const [pair, ...attrs] = c.split(";").map((s) => s.trim());
       const name = pair.split("=")[0];
@@ -1411,6 +1553,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         secure: /secure/i.test(attrStr),
         httpOnly: /httponly/i.test(attrStr),
         sameSite: sameSiteMatch ? sameSiteMatch[1] : null,
+        category: categorizeCookie(name),
       };
     });
 
@@ -2012,9 +2155,14 @@ export const analyzeSite = createServerFn({ method: "POST" })
     const hasGoogleFonts = techNames.has("Google Fonts");
     const hasYouTube = techNames.has("YouTube Embed");
     const hasForm = /<form\b/i.test(html);
-    const hasImprint = /href=["'][^"']*\/(impressum|imprint)["']/i.test(html);
+    const hasImprint =
+      /<(a|link)\b[^>]*href=["'][^"']*(impressum|imprint)[^"']*["']/i.test(html) ||
+      /<a\b[^>]*>[^<]*(impressum|imprint)[^<]*<\/a>/i.test(html);
     const hasPrivacy =
-      /href=["'][^"']*\/(datenschutz|privacy|datenschutzerklaerung|datenschutzerklärung)["']/i.test(
+      /<(a|link)\b[^>]*href=["'][^"']*(datenschutz|privacy|datenschutzerklaerung|datenschutzerklärung)[^"']*["']/i.test(
+        html,
+      ) ||
+      /<a\b[^>]*>[^<]*(datenschutz|privacy|datenschutzerklärung|datenschutzerklaerung)[^<]*<\/a>/i.test(
         html,
       );
     const youtubeNoCookie = hasYouTube && !/youtube\.com\/embed(?!-nocookie)/i.test(html);
@@ -2040,6 +2188,21 @@ export const analyzeSite = createServerFn({ method: "POST" })
     const h3WithoutH2 = h2Count === 0 && h3Count > 0;
     const headingHierarchyOk = !h2WithoutH1 && !h3WithoutH2;
 
+    const cookieBannerHtml =
+      /class\s*=\s*["'][^"']*(cookie-banner|cookie-consent|cookie-notice|gdpr-banner|cc-banner|cookie-popup|cookie-wall|cookie-settings|privacy-banner|consent-banner)[^"']*["']/i.test(
+        html,
+      ) ||
+      /id\s*=\s*["'][^"']*(cookie-banner|cookie-consent|cookie-notice|gdpr|cc-banner|cookie-popup|cookie-wall|cookie-settings|privacy-banner|consent-banner)[^"']*["']/i.test(
+        html,
+      ) ||
+      /data-testid\s*=\s*["'][^"']*(cookie|consent|gdpr)[^"']*["']/i.test(html) ||
+      techCategories.has("privacy");
+    const cookieBannerFixed = /position\s*:\s*fixed/i.test(html);
+    const cookieBannerOk = !cookieBannerHtml || cookieBannerFixed;
+    const nonEssentialCookies = cookies.some((c) =>
+      ["analytics", "marketing", "third-party"].includes(c.category),
+    );
+
     const complianceChecks: SeoCheck[] = [
       {
         key: "cookie-consent",
@@ -2054,6 +2217,34 @@ export const analyzeSite = createServerFn({ method: "POST" })
             : undefined,
         location: "Wird meist als Script im <head> eingebunden; Konfiguration im Tool-Dashboard.",
         learnMore: "https://www.gesetze-im-internet.de/ttdsg/__25.html",
+      },
+      {
+        key: "cookie-banner-detected",
+        label: "Cookie-Banner erkannt",
+        ok: cookieBannerHtml,
+        value: cookieBannerHtml ? (cookieBannerFixed ? "Banner (fixed)" : "Banner") : "keiner",
+        advice: !cookieBannerHtml
+          ? "Kein Cookie-Banner im HTML oder bekanntes Consent-Tool erkannt."
+          : undefined,
+        howToFix: !cookieBannerHtml
+          ? "Wenn nicht-essentielle Cookies gesetzt werden, integriere ein Consent-Tool mit sichtbarem Banner."
+          : undefined,
+        location: "Cookie-Consent-Script oder Template.",
+        learnMore: "https://www.gesetze-im-internet.de/ttdsg/__25.html",
+      },
+      {
+        key: "non-essential-cookies",
+        label: "Nur notwendige Cookies",
+        ok: !nonEssentialCookies,
+        value: nonEssentialCookies ? "nicht-essentielle gefunden" : "nur notwendige",
+        advice: nonEssentialCookies
+          ? "Analytics-, Marketing- oder Third-Party-Cookies wurden ohne Einwilligung gesetzt."
+          : undefined,
+        howToFix: nonEssentialCookies
+          ? "Blocke nicht-essentielle Cookies vor dem Einverständnis oder reduziere sie auf technisch notwendige."
+          : undefined,
+        location: "HTTP-Response Set-Cookie Header oder JavaScript.",
+        learnMore: "https://gdpr.eu/cookies/",
       },
       {
         key: "legal-pages",
@@ -2425,17 +2616,6 @@ export const analyzeSite = createServerFn({ method: "POST" })
     const navLinks = [...html.matchAll(/<nav\b[^>]*>[\s\S]*?<a\b/gi)].length;
     const mobileMenuOk = navLinks === 0 || navLinks < 10 || hamburgerMenu;
 
-    const cookieBanner =
-      /class\s*=\s*["'][^"']*(cookie-banner|cookie-consent|cookie-notice|gdpr-banner|cc-banner)[^"']*["']/i.test(
-        html,
-      ) ||
-      /id\s*=\s*["'][^"']*(cookie-banner|cookie-consent|cookie-notice|gdpr)[^"']*["']/i.test(
-        html,
-      ) ||
-      techCategories.has("privacy");
-    const cookieBannerFixed = /position\s*:\s*fixed/i.test(html);
-    const cookieBannerOk = !cookieBanner || cookieBannerFixed;
-
     const formCount = [...html.matchAll(/<form\b/gi)].length;
     const businessFormInputs = [...html.matchAll(/<(?:input|select|textarea)\b/gi)].length;
     const formWithoutSubmit = [...html.matchAll(/<form\b/gi)].filter(
@@ -2533,7 +2713,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         key: "cookie-banner",
         label: "Cookie-Banner blockiert nicht dauerhaft",
         ok: cookieBannerOk,
-        value: cookieBanner ? (cookieBannerFixed ? "fixed position" : "nicht fixed") : "keiner",
+        value: cookieBannerHtml ? (cookieBannerFixed ? "fixed position" : "nicht fixed") : "keiner",
         advice: !cookieBannerOk
           ? "Cookie-Banner ist nicht fixed positioniert und könnte Inhalte verdecken oder unzugänglich sein."
           : undefined,

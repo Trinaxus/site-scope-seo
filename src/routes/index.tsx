@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -52,6 +52,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { ConnectionsGraph, CATEGORY_META } from "@/components/ConnectionsGraph";
+import { ReportPDFDownload } from "@/components/ReportPDF";
+import { ReportCompare } from "@/components/ReportCompare";
+import { KeywordRankChecker } from "@/components/KeywordRankChecker";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -132,7 +135,7 @@ function Home() {
   });
 
   return (
-    <div className="min-h-screen bg-background text-foreground relative flex flex-col">
+    <div className="min-h-screen text-foreground relative flex flex-col">
       <TechBackground />
 
       <a
@@ -142,7 +145,7 @@ function Home() {
         Zum Hauptinhalt springen
       </a>
 
-      <header className="border-b border-border/60 backdrop-blur-md sticky top-0 z-40 bg-background/70">
+      <header className="border-b border-border/60 backdrop-blur-md fixed top-0 left-0 right-0 z-40 bg-background/80">
         <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3 font-semibold tracking-tight">
             <div className="rounded-lg bg-emerald-500/15 p-2">
@@ -167,7 +170,7 @@ function Home() {
         </div>
       </header>
 
-      <main id="main" className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-6 py-10 sm:py-16">
+      <main id="main" className="relative z-10 flex-1 w-full max-w-7xl mx-auto px-6 pt-28 pb-16">
         {/* Hero + search */}
         <section className="text-center max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/50 px-3 py-1 text-xs text-muted-foreground mb-6">
@@ -341,23 +344,75 @@ function CollapsibleFooter() {
 }
 
 function TechBackground() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId: number;
+    const COLS = 40;
+    const ROWS = 22;
+    let W = 0;
+    let H = 0;
+
+    const resize = () => {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    };
+    resize();
+    window.addEventListener("resize", resize);
+
+    const draw = (t: number) => {
+      ctx.clearRect(0, 0, W, H);
+
+      const colGap = W / (COLS - 1);
+      const rowGap = H / (ROWS - 1);
+
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const x = c * colGap;
+          const baseY = r * rowGap;
+
+          // wave displacement: two overlapping sine waves
+          const wave1 = Math.sin(c * 0.35 + t * 0.0007 + r * 0.2) * 28;
+          const wave2 = Math.sin(c * 0.18 - t * 0.0005 + r * 0.3) * 16;
+          const y = baseY + wave1 + wave2;
+
+          // brightness based on wave height: norm 0..1 (0=trough, 1=crest)
+          const norm = (wave1 + wave2 + 44) / 88;
+          const alpha = 0.12 + norm * 0.6;
+          const radius = 0.8 + norm * 1.4;
+
+          // crests = white-blue (#94a3c8), troughs = emerald green (#34d399)
+          const cr = Math.round(52 + norm * (148 - 52));
+          const cg = Math.round(211 + norm * (163 - 211));
+          const cb = Math.round(153 + norm * (200 - 153));
+
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${cr},${cg},${cb},${alpha.toFixed(2)})`;
+          ctx.fill();
+        }
+      }
+
+      animId = requestAnimationFrame(draw);
+    };
+
+    animId = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(animId);
+      window.removeEventListener("resize", resize);
+    };
+  }, []);
+
   return (
     <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-      {/* base wash */}
-      <div className="absolute inset-0 bg-background" />
-
-      {/* clean line grid */}
-      <div
-        className="absolute inset-0 opacity-[0.10]"
-        style={{
-          backgroundImage:
-            "linear-gradient(hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)",
-          backgroundSize: "96px 96px",
-        }}
-      />
-
-      {/* very faint bottom fade */}
-      <div className="absolute inset-0 bg-linear-to-b from-background/0 via-background/0 to-background" />
+      <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
+      {/* bottom fade for readability */}
+      <div className="absolute inset-0 bg-linear-to-b from-transparent via-transparent to-background" />
     </div>
   );
 }
@@ -408,6 +463,16 @@ function ScanButton({ pending, disabled }: { pending: boolean; disabled: boolean
 function Results({ result }: { result: AnalyzeResult }) {
   return (
     <section className="mt-12 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-bold">Analyseergebnis</h2>
+          <p className="text-sm text-muted-foreground">{result.finalUrl}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <ReportCompare current={result} />
+          <ReportPDFDownload result={result} />
+        </div>
+      </div>
       {/* Top summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <ScoreCard
@@ -606,6 +671,12 @@ function Results({ result }: { result: AnalyzeResult }) {
           >
             SEO
           </TabsTrigger>
+          <TabsTrigger
+            value="keywords"
+            title="Keyword-Ranking-Check: Wie wird die Seite bei Google gefunden?"
+          >
+            Keywords
+          </TabsTrigger>
           <TabsTrigger value="security" title="Security-Header und Cookie-Flags">
             Security
           </TabsTrigger>
@@ -760,6 +831,12 @@ function Results({ result }: { result: AnalyzeResult }) {
           </Panel>
         </TabsContent>
 
+        <TabsContent value="keywords">
+          <Panel title="Keyword-Ranking-Check" icon={<Search className="h-4 w-4" />}>
+            <KeywordRankChecker result={result} />
+          </Panel>
+        </TabsContent>
+
         <TabsContent value="security" className="grid gap-4 lg:grid-cols-2">
           <Panel title="Security Header" icon={<Shield className="h-4 w-4" />}>
             <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
@@ -784,7 +861,10 @@ function Results({ result }: { result: AnalyzeResult }) {
               <ul className="space-y-2">
                 {result.cookies.map((c, i) => (
                   <li key={i} className="rounded-lg border border-border/50 p-3 text-sm">
-                    <div className="font-mono text-xs">{c.name}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="font-mono text-xs">{c.name}</div>
+                      <CookieCategoryBadge category={c.category} />
+                    </div>
                     <div className="mt-1 flex gap-1.5 flex-wrap text-[10px]">
                       <FlagBadge ok={c.secure}>Secure</FlagBadge>
                       <FlagBadge ok={c.httpOnly}>HttpOnly</FlagBadge>
@@ -861,6 +941,7 @@ function Results({ result }: { result: AnalyzeResult }) {
         </TabsContent>
 
         <TabsContent value="compliance">
+          <CookieConsentPanel result={result} />
           <Panel title="DSGVO / TDDDG & BITV 2.0 Checks" icon={<Scale className="h-4 w-4" />}>
             <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
               <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
@@ -1004,8 +1085,8 @@ function ScoreCard({
   );
   return (
     <div
-      className={`relative rounded-2xl border p-5 overflow-hidden ${
-        disabled ? "border-border/30 bg-muted/30" : "border-border/60 bg-card/60 backdrop-blur"
+      className={`relative rounded-2xl border p-5 overflow-hidden backdrop-blur-md ${
+        disabled ? "border-border/30 bg-card/40" : "border-border/60 bg-card/60"
       }`}
       title={tooltip}
     >
@@ -1206,6 +1287,113 @@ function SecurityItem({ h }: { h: AnalyzeResult["securityHeaders"][number] }) {
         </div>
       )}
     </li>
+  );
+}
+
+function CookieCategoryBadge({
+  category,
+}: {
+  category: AnalyzeResult["cookies"][number]["category"];
+}) {
+  const labels: Record<typeof category, string> = {
+    necessary: "notwendig",
+    analytics: "analyse",
+    marketing: "marketing",
+    "third-party": "third-party",
+    unknown: "unbekannt",
+  };
+  const styles: Record<typeof category, string> = {
+    necessary: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+    analytics: "bg-amber-500/15 text-amber-300 border-amber-500/30",
+    marketing: "bg-rose-500/15 text-rose-300 border-rose-500/30",
+    "third-party": "bg-sky-500/15 text-sky-300 border-sky-500/30",
+    unknown: "bg-muted text-muted-foreground border-border",
+  };
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium border ${styles[category]}`}
+    >
+      {labels[category]}
+    </span>
+  );
+}
+
+function CookieConsentPanel({ result }: { result: AnalyzeResult }) {
+  const consentCheck = result.complianceChecks.find((c) => c.key === "cookie-consent");
+  const bannerCheck = result.complianceChecks.find((c) => c.key === "cookie-banner-detected");
+  const nonEssentialCheck = result.complianceChecks.find((c) => c.key === "non-essential-cookies");
+  const nonEssentialCookies = result.cookies.filter((c) =>
+    ["analytics", "marketing", "third-party"].includes(c.category),
+  );
+
+  return (
+    <Panel title="Cookie-Consent Zusammenfassung" icon={<Cookie className="h-4 w-4" />}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="rounded-lg border border-border/50 bg-background/40 p-3">
+          <div className="text-xs text-muted-foreground mb-1">Consent-Tool</div>
+          <div className="text-sm font-medium flex items-center gap-1.5">
+            {consentCheck?.ok ? (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="text-emerald-400">{consentCheck.value}</span>
+              </>
+            ) : (
+              <>
+                <XCircle className="h-3.5 w-3.5 text-rose-400" />
+                <span className="text-rose-400">{consentCheck?.value ?? "-"}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="rounded-lg border border-border/50 bg-background/40 p-3">
+          <div className="text-xs text-muted-foreground mb-1">Banner erkannt</div>
+          <div className="text-sm font-medium flex items-center gap-1.5">
+            {bannerCheck?.ok ? (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="text-emerald-400">{bannerCheck.value}</span>
+              </>
+            ) : (
+              <>
+                <XCircle className="h-3.5 w-3.5 text-rose-400" />
+                <span className="text-rose-400">{bannerCheck?.value ?? "nein"}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="rounded-lg border border-border/50 bg-background/40 p-3">
+          <div className="text-xs text-muted-foreground mb-1">Nicht-notwendige Cookies</div>
+          <div className="text-sm font-medium flex items-center gap-1.5">
+            {nonEssentialCheck?.ok ? (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="text-emerald-400">{nonEssentialCheck.value}</span>
+              </>
+            ) : (
+              <>
+                <XCircle className="h-3.5 w-3.5 text-rose-400" />
+                <span className="text-rose-400">{nonEssentialCookies.length} erkannt</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+      {nonEssentialCookies.length > 0 && (
+        <div className="mt-4">
+          <div className="text-xs text-muted-foreground mb-2">Nicht-notwendige Cookies</div>
+          <ul className="space-y-2">
+            {nonEssentialCookies.map((c, i) => (
+              <li key={i} className="rounded-lg border border-border/50 p-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="font-mono text-xs">{c.name}</div>
+                  <CookieCategoryBadge category={c.category} />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Panel>
   );
 }
 
