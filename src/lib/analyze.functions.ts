@@ -127,6 +127,7 @@ export interface AnalyzeResult {
   robots: { found: boolean; disallowAll: boolean; sitemaps: string[]; raw?: string };
   sitemap: { found: boolean; urls: number; url?: string };
   tech: TechHit[];
+  languageShares: Record<string, number>;
   links: {
     internal: number;
     external: number;
@@ -144,6 +145,7 @@ export interface AnalyzeResult {
     hosting: string[];
     cms: string[];
     languages: string[];
+    databases: string[];
     apiRoutes: string[];
     summary: string;
   };
@@ -709,6 +711,21 @@ const FINGERPRINTS: Fingerprint[] = [
     category: "language",
     html: [/\.tsx?(\?|"|')/, /sourceMappingURL=[^"']+\.ts/],
   },
+  {
+    name: "JavaScript",
+    category: "language",
+    html: [/\.js(\?|"|')/, /<script\b/i],
+  },
+  {
+    name: "HTML",
+    category: "language",
+    html: [/<!DOCTYPE html|<html\b/i],
+  },
+  {
+    name: "CSS",
+    category: "language",
+    html: [/<style\b|\.css(\?|"|')/i],
+  },
 
   // Database / Backend
   { name: "Supabase", category: "database", html: [/supabase\.co|supabase\.io/] },
@@ -807,6 +824,41 @@ function extractInlineScripts(html: string): string {
     if (!src) parts.push(m[1]);
   }
   return parts.join("\n");
+}
+
+function estimateLanguageShares(html: string): Record<string, number> {
+  const scriptTags = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)];
+  const styleTags = [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)];
+
+  const inlineJs = scriptTags.reduce((sum, m) => sum + m[1].length, 0);
+  const inlineCss = styleTags.reduce((sum, m) => sum + m[1].length, 0);
+
+  const tagTokens = html.match(/<[^>]+>/g) || [];
+  const htmlMarkup = tagTokens.reduce((sum, t) => sum + t.length, 0);
+
+  const total = Math.max(1, html.length);
+  const other = Math.max(0, total - htmlMarkup - inlineJs - inlineCss);
+
+  const raw = {
+    HTML: htmlMarkup,
+    CSS: inlineCss,
+    JavaScript: inlineJs,
+    Text: other,
+  };
+
+  const totalWeighted = Object.values(raw).reduce((a, b) => a + b, 0);
+  const shares: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    shares[k] = totalWeighted > 0 ? Math.round((v / totalWeighted) * 100) : 0;
+  }
+
+  // Rundungsfehler ausgleichen
+  const sum = Object.values(shares).reduce((a, b) => a + b, 0);
+  if (sum !== 100 && sum > 0) {
+    const maxKey = Object.entries(shares).sort((a, b) => b[1] - a[1])[0][0];
+    shares[maxKey] += 100 - sum;
+  }
+  return shares;
 }
 
 function detectTech(
@@ -1271,6 +1323,18 @@ async function extractExternalApiDomains(html: string, baseUrl: string): Promise
   return [...domains].slice(0, 20);
 }
 
+function inferDatabase(html: string, techNames: Set<string>): string[] {
+  const dbs: string[] = [];
+  if (techNames.has("WordPress") || /wp-content|wp-includes/i.test(html)) dbs.push("MySQL / MariaDB (typisch für WordPress)");
+  if (/\bmysql\b|\bmariadb\b/i.test(html)) dbs.push("MySQL / MariaDB");
+  if (/\bpostgres(ql)?\b/i.test(html)) dbs.push("PostgreSQL");
+  if (/\bmongodb\b/i.test(html)) dbs.push("MongoDB");
+  if (/\bsqlite\b/i.test(html)) dbs.push("SQLite");
+  if (/\bfirebase(io)?\b/i.test(html)) dbs.push("Firebase (NoSQL)");
+  if (/\bsupabase\b/i.test(html)) dbs.push("Supabase (PostgreSQL)");
+  return [...new Set(dbs)];
+}
+
 function buildArchitecture(
   tech: TechHit[],
   headers: Record<string, string>,
@@ -1281,7 +1345,7 @@ function buildArchitecture(
     tech.filter((t) => cats.includes(t.category)).map((t) => t.name);
 
   const frontend = inCategory("javascript-framework", "javascript-library", "ui-framework");
-  const backend = inCategory("language");
+  let backend = inCategory("language");
   const server = inCategory("webserver");
   const hosting = inCategory("hosting", "cdn");
   const cms = inCategory("cms", "ecommerce");
@@ -1293,11 +1357,34 @@ function buildArchitecture(
     server.push(serverHeader.split("/")[0]);
   }
 
+  // PHP erkennen, auch wenn Header nicht gesetzt sind
+  if (!names.has("PHP")) {
+    const hasPhp =
+      /\.php(\?|"|')/i.test(html) ||
+      /wp-content|wp-includes|wp-json/i.test(html) ||
+      /\bphp\b/i.test(headers["x-powered-by"] ?? "");
+    if (hasPhp) {
+      backend.push("PHP");
+      names.add("PHP");
+    }
+  }
+
+  // JSON als statische Datenquelle erkennen
+  const jsonDataSources = [...html.matchAll(/["']([^"']+\.json(?:\?[^"']*)?)["']/gi)].map(
+    (m) => m[1],
+  );
+  const uniqueJsonSources = [...new Set(jsonDataSources)];
+
+  const databases = inferDatabase(html, names);
+
   const parts: string[] = [];
   if (cms.length) parts.push(`CMS/Shop-System: ${cms.join(", ")}`);
   if (frontend.length) parts.push(`Frontend: ${frontend.join(", ")}`);
   if (backend.length || languages.length)
     parts.push(`Backend/Sprache: ${[...new Set([...backend, ...languages])].join(", ")}`);
+  if (databases.length) parts.push(`Datenbank: ${databases.join(", ")}`);
+  if (uniqueJsonSources.length)
+    parts.push(`${uniqueJsonSources.length} JSON-Datenquelle(n) erkannt`);
   if (apiRoutes.length) parts.push(`${apiRoutes.length} Backend-Route(n) erkannt`);
   if (hosting.length) parts.push(`Hosting/CDN: ${hosting.join(", ")}`);
   if (server.length) parts.push(`Webserver: ${server.join(", ")}`);
@@ -1314,6 +1401,7 @@ function buildArchitecture(
     hosting,
     cms,
     languages,
+    databases,
     apiRoutes,
     summary,
   };
@@ -3131,6 +3219,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
       robots,
       sitemap,
       tech,
+      languageShares: estimateLanguageShares(html),
       links: {
         internal,
         external,

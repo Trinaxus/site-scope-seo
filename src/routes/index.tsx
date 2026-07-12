@@ -44,6 +44,8 @@ import {
   Heart,
   ChevronDown,
   ChevronUp,
+  Database,
+  FileJson,
 } from "lucide-react";
 import { analyzeSite, type AnalyzeResult } from "@/lib/analyze.functions";
 import { Button } from "@/components/ui/button";
@@ -1455,6 +1457,14 @@ function CookieConsentPanel({ result }: { result: AnalyzeResult }) {
 
 function ArchitecturePanel({ result }: { result: AnalyzeResult }) {
   const a = result.architecture;
+
+  // JSON-Datenquellen aus dem HTML extrahieren
+  const jsonSources = [
+    ...new Set(
+      [...result.finalUrl.matchAll(/["']([^"']+\.json(?:\?[^"']*)?)["']/gi)].map((m) => m[1]),
+    ),
+  ];
+
   const rows = [
     {
       label: "CMS / Shop",
@@ -1473,6 +1483,18 @@ function ArchitecturePanel({ result }: { result: AnalyzeResult }) {
       icon: <Server className="h-4 w-4" />,
       items: [...new Set([...a.backend, ...a.languages])],
       help: "Server-seitige Sprache oder Runtime. Code liegt auf dem API-Server oder im Hosting-Backend.",
+    },
+    {
+      label: "Datenbank",
+      icon: <Database className="h-4 w-4" />,
+      items: a.databases ?? [],
+      help: "Erkannte oder typische Datenbank-Technologie. Bei WordPress meist MySQL/MariaDB; Firebase/Supabase sind NoSQL/Cloud-Alternativen.",
+    },
+    {
+      label: "JSON-Datenquellen",
+      icon: <FileJson className="h-4 w-4" />,
+      items: jsonSources,
+      help: "Statische .json-Dateien, die im HTML referenziert werden. Das kann eine datenbanklose Lösung sein.",
     },
     {
       label: "Backend-Routen / API-Endpunkte",
@@ -1778,6 +1800,50 @@ function ArchitecturePanel({ result }: { result: AnalyzeResult }) {
   );
 }
 
+const LANGUAGE_COLORS: Record<string, string> = {
+  HTML: "#e34c26",
+  CSS: "#563d7c",
+  JavaScript: "#f1e05a",
+  TypeScript: "#3178c6",
+  PHP: "#4F5D95",
+  Text: "#9ca3af",
+};
+
+function LanguageBar({ shares }: { shares: Record<string, number> }) {
+  const entries = Object.entries(shares).filter(([, v]) => v > 0);
+  if (entries.length === 0) return null;
+  return (
+    <div className="rounded-2xl border border-border/60 bg-card/50 backdrop-blur p-5 mb-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Code2 className="h-4 w-4 text-primary" />
+        <h3 className="text-sm font-semibold">Sprachen</h3>
+      </div>
+      <div className="h-3 w-full rounded-full overflow-hidden flex">
+        {entries.map(([name, pct]) => (
+          <div
+            key={name}
+            style={{ width: `${pct}%`, backgroundColor: LANGUAGE_COLORS[name] ?? "#9ca3af" }}
+            className="h-full"
+            title={`${name}: ${pct}%`}
+          />
+        ))}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-3 text-xs">
+        {entries.map(([name, pct]) => (
+          <div key={name} className="flex items-center gap-1.5">
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: LANGUAGE_COLORS[name] ?? "#9ca3af" }}
+            />
+            <span className="font-medium">{name}</span>
+            <span className="text-muted-foreground tabular-nums">{pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TechGrid({ result }: { result: AnalyzeResult }) {
   const grouped = new Map<string, AnalyzeResult["tech"]>();
   for (const t of result.tech) {
@@ -1785,7 +1851,7 @@ function TechGrid({ result }: { result: AnalyzeResult }) {
     g.push(t);
     grouped.set(t.category, g);
   }
-  if (result.tech.length === 0) {
+  if (result.tech.length === 0 && Object.keys(result.languageShares).length === 0) {
     return (
       <Panel title="Tech-Stack" icon={<Layers className="h-4 w-4" />}>
         <div className="text-sm text-muted-foreground">Keine bekannten Technologien erkannt.</div>
@@ -1793,7 +1859,9 @@ function TechGrid({ result }: { result: AnalyzeResult }) {
     );
   }
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+    <>
+      <LanguageBar shares={result.languageShares} />
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
       {[...grouped.entries()].map(([cat, items]) => {
         const meta = CATEGORY_META[cat as keyof typeof CATEGORY_META];
         return (
@@ -1834,6 +1902,7 @@ function TechGrid({ result }: { result: AnalyzeResult }) {
           </div>
         );
       })}
-    </div>
+      </div>
+    </>
   );
 }
