@@ -197,13 +197,16 @@ function Home() {
               <label htmlFor="url-input" className="sr-only">
                 Website-URL
               </label>
-              <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 id="url-input"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 placeholder="example.com oder https://…"
-                className="pl-9 h-12 bg-card/60 backdrop-blur border-border/60 text-base"
+                className={`h-12 bg-card/60 backdrop-blur text-base transition-all duration-300 outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
+                  url.trim()
+                    ? "border-2 border-emerald-400 shadow-[0_0_18px_2px_rgba(52,211,153,0.35)]"
+                    : "border-2 border-border/60 focus:border-emerald-400/60 focus:shadow-[0_0_10px_1px_rgba(52,211,153,0.2)]"
+                }`}
                 autoFocus
               />
             </div>
@@ -421,44 +424,24 @@ function TechBackground() {
 
 function ScanButton({ pending, disabled }: { pending: boolean; disabled: boolean }) {
   const isDisabled = Boolean(disabled || pending);
+  const hasUrl = !disabled && !pending;
   return (
-    <div className="relative sm:translate-x-1">
-      {/* outer ripple rings with glow */}
-      {pending && (
-        <>
-          <span
-            className="absolute inset-0 rounded-md ring-2 ring-primary/50 shadow-[0_0_16px] shadow-primary/40"
-            style={{ animation: "ripple 1.5s ease-out infinite" }}
-          />
-          <span
-            className="absolute inset-0 rounded-md ring-1 ring-primary/40"
-            style={{ animation: "ripple 1.5s ease-out infinite 0.35s" }}
-          />
-          <span
-            className="absolute inset-0 rounded-md ring-1 ring-primary/25"
-            style={{ animation: "ripple 1.5s ease-out infinite 0.7s" }}
-          />
-        </>
-      )}
-
-      <Button
-        type="submit"
-        disabled={isDisabled}
-        suppressHydrationWarning
-        size="lg"
-        className={`relative h-12 px-6 gap-2 ${pending ? "animate-pulse" : ""}`}
-      >
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-        {pending ? "Analysiere…" : "Analysieren"}
-      </Button>
-
-      <style>{`
-        @keyframes ripple {
-          0% { transform: scale(1); opacity: 0.75; }
-          100% { transform: scale(1.6); opacity: 0; }
-        }
-      `}</style>
-    </div>
+    <Button
+      type="submit"
+      disabled={isDisabled}
+      suppressHydrationWarning
+      size="lg"
+      className={`h-12 px-6 gap-2 shrink-0 transition-all duration-300 ${
+        pending
+          ? "bg-emerald-500/90 text-primary-foreground backdrop-blur hover:bg-emerald-500"
+          : hasUrl
+            ? "shadow-[0_0_20px_4px_rgba(52,211,153,0.4)] hover:shadow-[0_0_28px_6px_rgba(52,211,153,0.5)] hover:bg-emerald-400"
+            : ""
+      }`}
+    >
+      {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+      {pending ? "Analysiere…" : "Analysieren"}
+    </Button>
   );
 }
 
@@ -646,8 +629,12 @@ function Results({ result }: { result: AnalyzeResult }) {
           </div>
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
-          <Chip icon={<Server className="h-3 w-3" />}>Status {result.status}</Chip>
-          <Chip icon={<Zap className="h-3 w-3" />}>{result.timings.ttfb}ms TTFB</Chip>
+          <Chip icon={<Server className="h-3 w-3" />} variant={result.status === 200 ? "success" : result.status && result.status < 400 ? "warning" : "danger"}>
+            Status {result.status}
+          </Chip>
+          <Chip icon={<Zap className="h-3 w-3" />} variant={ttfbVariant(result.timings.ttfb)}>
+            {result.timings.ttfb}ms TTFB
+          </Chip>
           <Chip icon={<FileText className="h-3 w-3" />}>{result.timings.downloadKb}KB HTML</Chip>
           <Chip icon={<Code2 className="h-3 w-3" />}>{result.links.scripts} Scripts</Chip>
         </div>
@@ -1172,13 +1159,33 @@ function Panel({
   );
 }
 
-function Chip({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+function Chip({
+  icon,
+  children,
+  variant = "default",
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  variant?: "default" | "success" | "warning" | "danger";
+}) {
+  const styles = {
+    default: "border-border/60 bg-background/60",
+    success: "border-emerald-500/40 bg-emerald-500/15 text-emerald-300",
+    warning: "border-amber-500/40 bg-amber-500/15 text-amber-300",
+    danger: "border-rose-500/40 bg-rose-500/15 text-rose-300",
+  };
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-2.5 py-1 text-xs">
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${styles[variant]}`}>
       {icon}
       {children}
     </span>
   );
+}
+
+function ttfbVariant(ttfb: number): "success" | "warning" | "danger" {
+  if (ttfb <= 200) return "success";
+  if (ttfb <= 600) return "warning";
+  return "danger";
 }
 
 function Stat({ label, value }: { label: string; value: number }) {
@@ -1251,19 +1258,66 @@ function HowToFix({
 }
 
 function SeoCheckItem({ c }: { c: AnalyzeResult["seoChecks"][number] }) {
+  const [open, setOpen] = useState(false);
+  const hasFindings = (c.findings?.length ?? 0) > 0;
   return (
-    <li className="py-3 flex items-start gap-3">
-      {c.ok ? (
-        <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
-      ) : (
-        <XCircle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
+    <li className="py-3">
+      <button
+        type="button"
+        onClick={() => hasFindings && setOpen((o) => !o)}
+        className={`w-full flex items-start gap-3 text-left ${hasFindings ? "cursor-pointer" : "cursor-default"}`}
+        aria-expanded={hasFindings ? open : undefined}
+      >
+        {c.ok ? (
+          <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0 mt-0.5" />
+        ) : (
+          <XCircle className="h-5 w-5 text-rose-400 shrink-0 mt-0.5" />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div className="font-medium text-sm">{c.label}</div>
+            {hasFindings && (
+              <span className="text-[10px] text-muted-foreground">
+                {open ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+              </span>
+            )}
+          </div>
+          <div className="text-xs text-muted-foreground truncate">{c.value}</div>
+          {c.advice && !c.ok && <div className="text-xs text-amber-400/90 mt-1">{c.advice}</div>}
+          {!c.ok && <HowToFix howToFix={c.howToFix} location={c.location} learnMore={c.learnMore} />}
+        </div>
+      </button>
+      {open && hasFindings && (
+        <div className="mt-2 ml-8 space-y-1.5">
+          {c.findings!.slice(0, 20).map((f, i) => (
+            <div
+              key={i}
+              className={`rounded-md border px-2.5 py-1.5 text-xs ${
+                f.type === "positive"
+                  ? "border-emerald-500/30 bg-emerald-500/10"
+                  : f.type === "negative"
+                    ? "border-rose-500/30 bg-rose-500/10"
+                    : "border-border/50 bg-background/50"
+              }`}
+            >
+              <div className="flex items-center gap-1.5">
+                {f.type === "positive" && <CheckCircle2 className="h-3 w-3 text-emerald-400" />}
+                {f.type === "negative" && <XCircle className="h-3 w-3 text-rose-400" />}
+                {f.type === "info" && <Info className="h-3 w-3 text-blue-400" />}
+                <span className="font-medium">{f.message}</span>
+              </div>
+              {f.snippet && (
+                <code className="mt-1 block break-all text-[10px] text-muted-foreground font-mono">
+                  {f.snippet}
+                </code>
+              )}
+              {f.howToFix && (
+                <div className="mt-1 text-[10px] text-amber-400/90">Fix: {f.howToFix}</div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
-      <div className="min-w-0 flex-1">
-        <div className="font-medium text-sm">{c.label}</div>
-        <div className="text-xs text-muted-foreground truncate">{c.value}</div>
-        {c.advice && !c.ok && <div className="text-xs text-amber-400/90 mt-1">{c.advice}</div>}
-        {!c.ok && <HowToFix howToFix={c.howToFix} location={c.location} learnMore={c.learnMore} />}
-      </div>
     </li>
   );
 }

@@ -62,6 +62,14 @@ export interface SeoCheck {
   howToFix?: string;
   location?: string;
   learnMore?: string;
+  findings?: Finding[];
+}
+
+export interface Finding {
+  type: "positive" | "negative" | "info";
+  message: string;
+  snippet?: string;
+  howToFix?: string;
 }
 
 export interface AnalyzeResult {
@@ -1767,9 +1775,29 @@ export const analyzeSite = createServerFn({ method: "POST" })
     ];
 
     // SEO checks
-    const imgTags = html.match(/<img\b[^>]*>/gi) || [];
+    const imgTags = [...html.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
     const imgCount = imgTags.length;
     const imgWithAlt = imgTags.filter((t) => /\balt=/i.test(t)).length;
+    const imgFindings: Finding[] = imgTags.slice(0, 20).map((tag) => {
+      const altMatch = tag.match(/\balt\s*=\s*["']([^"']*)["']/i);
+      const srcMatch = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i);
+      const alt = altMatch ? altMatch[1] : undefined;
+      const src = srcMatch ? srcMatch[1] : undefined;
+      const snippet = tag.length > 120 ? tag.slice(0, 120) + "…" : tag;
+      if (alt !== undefined) {
+        return {
+          type: "positive" as const,
+          message: `Alt-Text: "${alt || "(leer)"}"`,
+          snippet: src || snippet,
+        };
+      }
+      return {
+        type: "negative" as const,
+        message: "Bild ohne alt-Attribut",
+        snippet: src || snippet,
+        howToFix: "Füge ein beschreibendes alt-Attribut hinzu oder alt=\"\" für Dekobilder.",
+      };
+    });
 
     const seoChecks: SeoCheck[] = [
       {
@@ -1933,6 +1961,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
             : undefined,
         location: "HTML/Template/Editor-Inhalt.",
         learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/img#alt",
+        findings: imgFindings,
       },
       {
         key: "https",
@@ -2177,11 +2206,23 @@ export const analyzeSite = createServerFn({ method: "POST" })
     const formLabelsOk =
       !hasForm || formInputs.length === 0 || labeledInputs / formInputs.length >= 0.7;
     const linkTags = [...html.matchAll(/<a\b[^>]*>([\s\S]*?)<\/a>/gi)];
+    const emptyLinkFindings: Finding[] = [];
     const emptyLinks = linkTags.filter((m) => {
       const inner = m[1].replace(/<[^>]+>/g, "").trim();
       const hasAria = /aria-label=["'][^"']+["']/i.test(m[0]);
       const hasTitle = /title=["'][^"']+["']/i.test(m[0]);
-      return inner.length === 0 && !hasAria && !hasTitle;
+      const isEmpty = inner.length === 0 && !hasAria && !hasTitle;
+      if (isEmpty) {
+        const href = m[0].match(/href\s*=\s*["']([^"']*)["']/i)?.[1] || "";
+        const snippet = m[0].length > 120 ? m[0].slice(0, 120) + "…" : m[0];
+        emptyLinkFindings.push({
+          type: "negative",
+          message: `Leerer Link${href ? ` (href: ${href})` : ""}`,
+          snippet,
+          howToFix: "Füge einen Link-Text, aria-label oder title hinzu.",
+        });
+      }
+      return isEmpty;
     }).length;
     const ariaLinksOk = emptyLinks === 0;
     const h2WithoutH1 = h1s.length === 0 && h2Count > 0;
@@ -2351,6 +2392,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
           : undefined,
         location: "Komponenten / Template / Theme.",
         learnMore: "https://www.w3.org/WAI/WCAG21/Understanding/link-purpose-in-context.html",
+        findings: emptyLinkFindings,
       },
       {
         key: "heading-hierarchy",
@@ -2602,10 +2644,20 @@ export const analyzeSite = createServerFn({ method: "POST" })
     const allImgTags = [...html.matchAll(/<img\b/gi)].length;
     const imgLayoutOk = allImgTags === 0 || imgWithoutMaxWidth / Math.max(1, allImgTags) < 0.3;
 
-    const popupCount = [
+    const popupMatches = [
       ...html.matchAll(/class\s*=\s*["'][^"']*(modal|popup|overlay|lightbox|dialog)[^"']*["']/gi),
-    ].length;
+    ];
+    const popupCount = popupMatches.length;
     const popupOk = popupCount === 0 || popupCount < 3;
+    const popupFindings: Finding[] = popupMatches.slice(0, 15).map((m) => {
+      const snippet = m.input ? (m.input.length > 120 ? m.input.slice(0, 120) + "…" : m.input) : "";
+      return {
+        type: "negative" as const,
+        message: `Element mit Klasse "${m[0]}"`,
+        snippet,
+        howToFix: "Prüfe, ob das Element Mobilgeräte blockiert. Nutze nicht-blockierende Banner oder verschiebe Inhalte in den Footer.",
+      };
+    });
 
     const hamburgerMenu =
       /<button[^>]*class\s*=\s*["'][^"']*(?:hamburger|menu-toggle|navbar-toggler|nav-toggle)[^"']*["']/i.test(
@@ -2693,6 +2745,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
           : undefined,
         location: "Templates, Marketing-Scripts oder CMS-Plugins.",
         learnMore: "https://web.dev/popups/",
+        findings: popupFindings,
       },
       {
         key: "mobile-menu",
@@ -2837,7 +2890,14 @@ export const analyzeSite = createServerFn({ method: "POST" })
         "all-in-one-seo-pack",
         "elementor",
       ]);
-      const heavyPluginCount = wpPlugins.filter((p) => heavyPlugins.has(p)).length;
+      const matchedHeavyPlugins = wpPlugins.filter((p) => heavyPlugins.has(p));
+      const heavyPluginCount = matchedHeavyPlugins.length;
+      const heavyPluginFindings: Finding[] = matchedHeavyPlugins.map((p) => ({
+        type: heavyPluginCount > 2 ? "negative" : "info",
+        message: `Plugin "${p}" erkannt`,
+        howToFix:
+          "Prüfe, ob dieses Plugin wirklich nötig ist, und ob Asset-Loading optimiert werden kann.",
+      }));
 
       const generatorLeak = /WordPress[ /]?(\d+\.\d+(\.\d+)?)/i.test(generator ?? "");
 
@@ -2957,6 +3017,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
               : undefined,
           location: "WordPress-Plugins.",
           learnMore: "https://wordpress.org/documentation/article/optimization/",
+          findings: heavyPluginFindings,
         },
         {
           key: "wp-theme-known",
