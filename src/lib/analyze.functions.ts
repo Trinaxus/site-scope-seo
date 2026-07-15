@@ -87,6 +87,7 @@ export interface AnalyzeResult {
     security: number;
     performance: number;
     compliance: number;
+    accessibility: number;
     mobile: number;
     business: number;
     wordpress: number;
@@ -112,6 +113,7 @@ export interface AnalyzeResult {
   seoChecks: SeoCheck[];
   perfChecks: SeoCheck[];
   complianceChecks: SeoCheck[];
+  accessibilityChecks: SeoCheck[];
   mobileChecks: SeoCheck[];
   businessChecks: SeoCheck[];
   wpChecks: SeoCheck[];
@@ -143,8 +145,36 @@ export interface AnalyzeResult {
     scripts: number;
     stylesheets: number;
     images: number;
+    nofollow: number;
+    topDomains: { domain: string; count: number }[];
   };
-  headings: { h1: number; h2: number; h3: number; h1Text: string[] };
+  linksDetailed: {
+    href: string;
+    text: string;
+    external: boolean;
+    nofollow: boolean;
+    targetBlank: boolean;
+  }[];
+  images: {
+    src: string | null;
+    alt: string | null;
+    width: number | null;
+    height: number | null;
+    lazy: boolean;
+    format: string | null;
+    inline: boolean;
+  }[];
+  headings: {
+    h1: number;
+    h2: number;
+    h3: number;
+    h4: number;
+    h5: number;
+    h6: number;
+    h1Text: string[];
+    structure: { level: number; text: string }[];
+  };
+  schemas: { type?: string; raw: string }[];
   socials: { platform: string; url: string }[];
   socialHowTo: { platform: string; where: string }[];
   architecture: {
@@ -191,6 +221,43 @@ export interface AnalyzeResult {
     supportsHttp3: boolean;
     altSvc: string | null;
     server: string | null;
+  };
+  mixedContent: { url: string; type: "script" | "stylesheet" | "image" | "iframe" | "other" }[];
+  pwa: {
+    serviceWorkerFound: boolean;
+    serviceWorkerSrc: string | null;
+    manifestUrl: string | null;
+    manifestFound: boolean;
+    themeColor: string | null;
+    display: string | null;
+    startUrl: string | null;
+  };
+  pageSpeed: {
+    apiKeyConfigured: boolean;
+    error?: string;
+    mobile?: {
+      lcp: number | null;
+      inp: number | null;
+      cls: number | null;
+      ttfb: number | null;
+      fcp: number | null;
+      performanceScore: number | null;
+      accessibilityScore: number | null;
+      bestPracticesScore: number | null;
+      seoScore: number | null;
+    };
+    desktop?: {
+      lcp: number | null;
+      inp: number | null;
+      cls: number | null;
+      ttfb: number | null;
+      fcp: number | null;
+      performanceScore: number | null;
+      accessibilityScore: number | null;
+      bestPracticesScore: number | null;
+      seoScore: number | null;
+    };
+    estimated?: boolean;
   };
   errors: string[];
   warnings: string[];
@@ -384,6 +451,109 @@ function normalizeUrl(raw: string): string {
 function scoreFromChecks(passed: number, total: number): number {
   if (!total) return 0;
   return Math.round((passed / total) * 100);
+}
+
+type PageSpeedResult = AnalyzeResult["pageSpeed"];
+
+function estimatePageSpeed(
+  ttfb: number,
+  downloadKb: number,
+  scriptCount: number,
+  imageCount: number,
+  modernImageRatio: number,
+  lazyImageRatio: number,
+  hasCompression: boolean,
+): PageSpeedResult {
+  // Very rough heuristic: fast TTFB, small HTML, modern images, lazy loading, compression -> better score.
+  let score = 100;
+  if (ttfb > 600) score -= 25;
+  else if (ttfb > 300) score -= 10;
+  if (downloadKb > 500) score -= 10;
+  if (scriptCount > 30) score -= 15;
+  else if (scriptCount > 20) score -= 5;
+  if (imageCount > 50) score -= 10;
+  if (modernImageRatio < 0.5) score -= 10;
+  if (lazyImageRatio < 0.3) score -= 5;
+  if (!hasCompression) score -= 10;
+  score = Math.max(0, Math.min(100, score));
+  return {
+    apiKeyConfigured: false,
+    estimated: true,
+    mobile: {
+      lcp: Math.round(ttfb * 2.5),
+      inp: Math.round(80 + scriptCount * 2),
+      cls: 0.05,
+      ttfb,
+      fcp: Math.round(ttfb * 1.5),
+      performanceScore: score,
+      accessibilityScore: null,
+      bestPracticesScore: null,
+      seoScore: null,
+    },
+    desktop: {
+      lcp: Math.round(ttfb * 1.8),
+      inp: Math.round(60 + scriptCount * 1.5),
+      cls: 0.03,
+      ttfb,
+      fcp: Math.round(ttfb * 1.2),
+      performanceScore: Math.round(score * 1.1),
+      accessibilityScore: null,
+      bestPracticesScore: null,
+      seoScore: null,
+    },
+  };
+}
+
+async function fetchPageSpeedInsights(url: string, apiKey?: string): Promise<PageSpeedResult> {
+  const apiKeyConfigured = !!apiKey && apiKey.length > 10;
+  if (!apiKeyConfigured) {
+    return { apiKeyConfigured: false, estimated: false };
+  }
+
+  const categories = ["PERFORMANCE", "ACCESSIBILITY", "BEST_PRACTICES", "SEO"];
+  const categoryParam = categories.map((c) => `category=${c}`).join("&");
+  const base = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${apiKey}&${categoryParam}`;
+
+  async function run(strategy: "mobile" | "desktop") {
+    const res = await fetchWithTimeout(`${base}&strategy=${strategy}`, {}, 20000);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "unknown");
+      throw new Error(`PSI ${strategy}: ${res.status} ${text.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    const lighthouse = data.lighthouseResult;
+    const metrics = lighthouse?.audits || {};
+    const categories = lighthouse?.categories || {};
+    const getMetric = (key: string) => {
+      const numeric = metrics[key]?.numericValue;
+      return typeof numeric === "number" ? numeric : null;
+    };
+    const getScore = (key: string) => {
+      const score = categories[key]?.score;
+      return typeof score === "number" ? Math.round(score * 100) : null;
+    };
+    return {
+      lcp: getMetric("largest-contentful-paint"),
+      inp: getMetric("interaction-to-next-paint"),
+      cls: getMetric("cumulative-layout-shift"),
+      ttfb: getMetric("server-response-time"),
+      fcp: getMetric("first-contentful-paint"),
+      performanceScore: getScore("PERFORMANCE"),
+      accessibilityScore: getScore("ACCESSIBILITY"),
+      bestPracticesScore: getScore("BEST_PRACTICES"),
+      seoScore: getScore("SEO"),
+    };
+  }
+
+  try {
+    const [mobile, desktop] = await Promise.all([run("mobile"), run("desktop")]);
+    return { apiKeyConfigured: true, mobile, desktop };
+  } catch (err) {
+    return {
+      apiKeyConfigured: true,
+      error: err instanceof Error ? err.message : "PageSpeed Insights request failed",
+    };
+  }
 }
 
 function decodeHtmlEntities(input: string | null | undefined): string | null {
@@ -1705,11 +1875,39 @@ export const analyzeSite = createServerFn({ method: "POST" })
     );
 
     // Headings
-    const h1s = [...html.matchAll(/<h1[^>]*>([\s\S]*?)<\/h1>/gi)]
-      .map((m) => decodeHtmlEntities(m[1].replace(/<[^>]+>/g, "").trim()))
-      .filter(Boolean) as string[];
-    const h2Count = (html.match(/<h2\b/gi) || []).length;
-    const h3Count = (html.match(/<h3\b/gi) || []).length;
+    const headingRegex = /<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi;
+    const structure: { level: number; text: string }[] = [];
+    while (true) {
+      const match = headingRegex.exec(html);
+      if (!match) break;
+      const level = match[1];
+      const text = match[2];
+      if (!level || !text) continue;
+      structure.push({
+        level: Number(level),
+        text: (decodeHtmlEntities(text.replace(/<[^>]+>/g, "").trim()) ?? "").slice(0, 80),
+      });
+    }
+    const h1s = structure.filter((h) => h.level === 1).map((h) => h.text);
+    const h2Count = structure.filter((h) => h.level === 2).length;
+    const h3Count = structure.filter((h) => h.level === 3).length;
+    const h4Count = structure.filter((h) => h.level === 4).length;
+    const h5Count = structure.filter((h) => h.level === 5).length;
+    const h6Count = structure.filter((h) => h.level === 6).length;
+
+    // Schema.org / structured data
+    const schemas = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)]
+      .map((m) => {
+        const raw = m[1].trim();
+        let type: string | undefined;
+        try {
+          const parsed = JSON.parse(raw);
+          type = parsed["@type"] ?? (Array.isArray(parsed["@graph"]) ? parsed["@graph"][0]?.["@type"] : undefined);
+        } catch {
+          /* invalid JSON-LD */
+        }
+        return { type, raw };
+      });
 
     // Links & assets
     const scriptSrcs = [...html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi)].map((m) =>
@@ -1721,20 +1919,109 @@ export const analyzeSite = createServerFn({ method: "POST" })
     const imgSrcs = [...html.matchAll(/<img[^>]+src=["']([^"']+)["']/gi)].map((m) =>
       absoluteUrl(finalUrl, m[1]),
     );
-    const anchorHrefs = [...html.matchAll(/<a[^>]+href=["']([^"']+)["']/gi)].map((m) =>
-      absoluteUrl(finalUrl, m[1]),
-    );
+    const anchorTags = [...html.matchAll(/<a\b[^>]*>/gi)].map((m) => m[0]);
+    const linksDetailed: {
+      href: string;
+      text: string;
+      external: boolean;
+      nofollow: boolean;
+      targetBlank: boolean;
+    }[] = [];
+    const domainCounts: Record<string, number> = {};
     let internal = 0,
-      external = 0;
-    for (const h of anchorHrefs) {
+      external = 0,
+      nofollowCount = 0;
+    for (const tag of anchorTags) {
+      const hrefMatch = tag.match(/\bhref=["']([^"']+)["']/i);
+      if (!hrefMatch) continue;
+      const rawHref = hrefMatch[1];
+      if (rawHref.startsWith("#") || rawHref.startsWith("javascript:") || rawHref.startsWith("mailto:")) continue;
+      const href = absoluteUrl(finalUrl, rawHref);
+      const text =
+        decodeHtmlEntities(
+          html.slice(html.indexOf(tag) + tag.length).match(/^[\s\S]*?<\/a>/i)?.[0]?.replace(/<[^>]+>/g, "").trim() ??
+            "",
+        ) ?? "";
+      const nofollow = /\brel=["'][^"']*nofollow[^"']*["']/i.test(tag);
+      const targetBlank = /\btarget=["']?_blank["']?/i.test(tag);
       try {
-        const u = new URL(h);
-        if (u.origin === origin) internal++;
-        else if (u.protocol.startsWith("http")) external++;
+        const u = new URL(href);
+        if (u.protocol.startsWith("http")) {
+          if (u.origin === origin) {
+            internal++;
+          } else {
+            external++;
+            domainCounts[u.hostname] = (domainCounts[u.hostname] || 0) + 1;
+          }
+          if (nofollow) nofollowCount++;
+          linksDetailed.push({ href, text, external: u.origin !== origin, nofollow, targetBlank });
+        }
       } catch {
         /* skip */
       }
     }
+    const topDomains = Object.entries(domainCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([domain, count]) => ({ domain, count }));
+
+    // Mixed content detection (HTTP resources on HTTPS page)
+    const isHttpsPage = finalUrl.startsWith("https://");
+    const mixedContent: { url: string; type: "script" | "stylesheet" | "image" | "iframe" | "other" }[] = [];
+    if (isHttpsPage) {
+      const patterns: { regex: RegExp; type: "script" | "stylesheet" | "image" | "iframe" | "other" }[] = [
+        { regex: /<script[^>]+src=["']http:\/\/[^"']+["']/gi, type: "script" },
+        { regex: /<link[^>]+href=["']http:\/\/[^"']+["']/gi, type: "stylesheet" },
+        { regex: /<img[^>]+src=["']http:\/\/[^"']+["']/gi, type: "image" },
+        { regex: /<iframe[^>]+src=["']http:\/\/[^"']+["']/gi, type: "iframe" },
+        { regex: /<source[^>]+src=["']http:\/\/[^"']+["']/gi, type: "other" },
+        { regex: /<video[^>]+src=["']http:\/\/[^"']+["']/gi, type: "other" },
+        { regex: /<audio[^>]+src=["']http:\/\/[^"']+["']/gi, type: "other" },
+      ];
+      for (const { regex, type } of patterns) {
+        for (const match of html.matchAll(regex)) {
+          const urlMatch = match[0].match(/src=["'](http:\/\/[^"']+)["']|href=["'](http:\/\/[^"']+)["']/i);
+          const url = urlMatch ? (urlMatch[1] || urlMatch[2]) : null;
+          if (url && !mixedContent.some((m) => m.url === url)) {
+            mixedContent.push({ url, type });
+          }
+        }
+      }
+    }
+
+    // PWA detection (service worker + manifest)
+    const swMatch = html.match(/navigator\.serviceWorker\.register\(["']([^"']+)["']/i) ||
+      html.match(/<script[^>]*>[^]*?navigator\.serviceWorker\.register\(["']([^"']+)["']/i);
+    const manifestLink = html.match(/<link[^>]+rel=["']manifest["'][^>]+href=["']([^"']+)["']/i) ||
+      html.match(/<link[^>]+href=["']([^"']+)["'][^>]+rel=["']manifest["']/i);
+    const manifestUrl = manifestLink ? absoluteUrl(finalUrl, manifestLink[1]) : null;
+    let manifestFound = false;
+    let manifestData: { theme_color?: string; display?: string; start_url?: string } | null = null;
+    if (manifestUrl) {
+      try {
+        const swRes = await fetchWithTimeout(manifestUrl, {}, 4000);
+        if (swRes.ok) {
+          manifestFound = true;
+          const text = await swRes.text();
+          try {
+            manifestData = JSON.parse(text);
+          } catch {
+            /* invalid JSON */
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    const pwa = {
+      serviceWorkerFound: !!swMatch,
+      serviceWorkerSrc: swMatch ? swMatch[1] : null,
+      manifestUrl,
+      manifestFound,
+      themeColor: manifestData?.theme_color ?? themeColor,
+      display: manifestData?.display ?? null,
+      startUrl: manifestData?.start_url ?? null,
+    };
 
     // Socials
     const socialMap: Record<string, RegExp> = {
@@ -1875,6 +2162,28 @@ export const analyzeSite = createServerFn({ method: "POST" })
     const imgTags = [...html.matchAll(/<img\b[^>]*>/gi)].map((m) => m[0]);
     const imgCount = imgTags.length;
     const imgWithAlt = imgTags.filter((t) => /\balt=/i.test(t)).length;
+    const images = imgTags.map((tag) => {
+      const altMatch = tag.match(/\balt\s*=\s*["']([^"]*)["']/i);
+      const srcMatch = tag.match(/\bsrc\s*=\s*["']([^"]+)["']/i);
+      const widthMatch = tag.match(/\bwidth\s*=\s*["']?(\d+)["']?/i);
+      const heightMatch = tag.match(/\bheight\s*=\s*["']?(\d+)["']?/i);
+      const loadingMatch = tag.match(/\bloading\s*=\s*["']([^"']+)["']/i);
+      const src = srcMatch ? srcMatch[1] : null;
+      const format = src
+        ? src.startsWith("data:")
+          ? "inline"
+          : src.split("?")[0]?.split(".").pop()?.toLowerCase() || null
+        : null;
+      return {
+        src: src ? absoluteUrl(finalUrl, src) : null,
+        alt: altMatch ? altMatch[1] : null,
+        width: widthMatch ? Number(widthMatch[1]) : null,
+        height: heightMatch ? Number(heightMatch[1]) : null,
+        lazy: /lazy/i.test(loadingMatch?.[1] ?? ""),
+        format,
+        inline: !src || src.startsWith("data:"),
+      };
+    });
     const imgFindings: Finding[] = imgTags.slice(0, 20).map((tag) => {
       const altMatch = tag.match(/\balt\s*=\s*["']([^"']*)["']/i);
       const srcMatch = tag.match(/\bsrc\s*=\s*["']([^"']+)["']/i);
@@ -1961,6 +2270,44 @@ export const analyzeSite = createServerFn({ method: "POST" })
               : undefined,
         location: "Seiten-Template oder Editor-Inhalt (page.tsx, single.php, content).",
         learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/Heading_Elements",
+      },
+      {
+        key: "heading-order",
+        label: "Heading-Hierarchie",
+        ok:
+          structure.length === 0 ||
+          !structure.some(
+            (h, i, arr) => i > 0 && h.level > arr[i - 1].level + 1,
+          ),
+        value: `${structure.length} Headings`,
+        advice:
+          structure.length > 0 &&
+          structure.some((h, i, arr) => i > 0 && h.level > arr[i - 1].level + 1)
+            ? "Heading-Level übersprungen (z. B. H1 → H3)."
+            : undefined,
+        howToFix:
+          structure.length > 0 &&
+          structure.some((h, i, arr) => i > 0 && h.level > arr[i - 1].level + 1)
+            ? "Achte auf eine durchgehende H1 → H2 → H3-Hierarchie ohne ausgelassene Stufen."
+            : undefined,
+        location: "Seiten-Inhalt / Template / Editor.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/Heading_Elements",
+      },
+      {
+        key: "schema-org",
+        label: "Schema.org Structured Data",
+        ok: schemas.length > 0,
+        value: schemas.length ? `${schemas.length} JSON-LD` : "keine",
+        advice:
+          schemas.length === 0
+            ? "Keine Schema.org-Markup gefunden."
+            : undefined,
+        howToFix:
+          schemas.length === 0
+            ? "Füge JSON-LD Markup für Organisation, LocalBusiness, Product, Article oder BreadcrumbList im <head> oder <body> hinzu."
+            : undefined,
+        location: "HTML <head> / Template / SEO-Plugin / CMS-Schema-Einstellungen.",
+        learnMore: "https://schema.org/docs/gs.html",
       },
       {
         key: "canonical",
@@ -2238,6 +2585,69 @@ export const analyzeSite = createServerFn({ method: "POST" })
             : undefined,
         location: "Webserver/CDN-Konfiguration oder Framework-Response-Header.",
         learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Cache-Control",
+      },
+      {
+        key: "image-formats",
+        label: "Moderne Bildformate (WebP/AVIF)",
+        ok:
+          images.length === 0 ||
+          images.filter((img) => img.inline || /webp|avif|svg/.test(img.format ?? "")).length /
+            images.length >=
+            0.5,
+        value: `${images.filter((img) => /webp|avif|svg/.test(img.format ?? "")).length}/${images.length}`,
+        advice:
+          images.length > 0 &&
+          images.filter((img) => /webp|avif|svg/.test(img.format ?? "")).length / images.length < 0.5
+            ? "Viele Bilder liegen als JPEG/PNG vor."
+            : undefined,
+        howToFix:
+          images.length > 0 &&
+          images.filter((img) => /webp|avif|svg/.test(img.format ?? "")).length / images.length < 0.5
+            ? "Konvertiere Bilder nach WebP oder AVIF, nutze <picture>-Elemente oder ein Bild-CDN (Cloudinary, ImageKit, Cloudflare Images)."
+            : undefined,
+        location: "CMS-Medienbibliothek, Build-Tool oder Bild-CDN.",
+        learnMore: "https://web.dev/serve-images-webp/",
+      },
+      {
+        key: "image-lazy",
+        label: "Lazy Loading für Bilder",
+        ok:
+          images.length === 0 ||
+          images.filter((img) => img.lazy || img.inline).length / images.length >= 0.5,
+        value: `${images.filter((img) => img.lazy).length}/${images.length}`,
+        advice:
+          images.length > 0 &&
+          images.filter((img) => img.lazy || img.inline).length / images.length < 0.5
+            ? "Viele Bilder werden sofort geladen."
+            : undefined,
+        howToFix:
+          images.length > 0 &&
+          images.filter((img) => img.lazy || img.inline).length / images.length < 0.5
+            ? 'Füge außerhalb des initialen Viewports loading="lazy" zu <img>-Tags hinzu, nutze srcset für responsive Bilder.'
+            : undefined,
+        location: "HTML/Template/CMS-Inhalt.",
+        learnMore: "https://web.dev/lazy-loading-images/",
+      },
+      {
+        key: "image-dimensions",
+        label: "Bilder mit width/height",
+        ok:
+          images.length === 0 ||
+          images.filter((img) => img.inline || (img.width && img.height)).length / images.length >=
+            0.5,
+        value: `${images.filter((img) => img.width && img.height).length}/${images.length}`,
+        advice:
+          images.length > 0 &&
+          images.filter((img) => img.inline || (img.width && img.height)).length / images.length < 0.5
+            ? "Viele Bilder haben keine expliziten Maße."
+            : undefined,
+        howToFix:
+          images.length > 0 &&
+          images.filter((img) => img.inline || (img.width && img.height)).length / images.length < 0.5
+            ? "Setze width und height Attribute auf <img>, um Layout-Shifts (CLS) zu vermeiden, oder nutze CSS aspect-ratio."
+            : undefined,
+        location: "HTML/Template/CMS-Inhalt.",
+        learnMore: "https://web.dev/optimize-cls/#images-without-dimensions",
       },
     ];
     const perfPassed = perfChecks.filter((c) => c.ok).length;
@@ -2643,9 +3053,155 @@ export const analyzeSite = createServerFn({ method: "POST" })
     const compliancePassed = complianceChecks.filter((c) => c.ok).length;
     const complianceScore = scoreFromChecks(compliancePassed, complianceChecks.length);
 
+    // Accessibility / BITV 2.0 checks
+    const skipLinkFound = /<a[^>]+href=["']#(main|content|skip|start)["'][^>]*>([^<]*skip|Sprung|Zum Inhalt|Weiter zum Inhalt)/i.test(html) ||
+      /<a[^>]+class=["'][^"']*skip[^"']*["'][^>]*>/i.test(html);
+    const formInputTags = [...html.matchAll(/<(input|textarea|select)\b[^>]*>/gi)].map((m) => m[0]);
+    const formInputsMissingLabel = formInputTags.filter((tag) => {
+      const id = tag.match(/\bid=["']([^"']+)["']/i)?.[1];
+      const ariaLabel = /\baria-label=["']/i.test(tag);
+      const ariaLabelledBy = /\baria-labelledby=["']/i.test(tag);
+      const hasLabel = id && new RegExp(`<label[^>]+for=["']${id}["']`, "i").test(html);
+      const placeholder = tag.match(/\bplaceholder=["']([^"']+)["']/i)?.[1];
+      const type = tag.match(/\btype=["']([^"']+)["']/i)?.[1]?.toLowerCase();
+      const isHidden = type && ["hidden", "submit", "button", "image", "reset"].includes(type);
+      return !isHidden && !hasLabel && !ariaLabel && !ariaLabelledBy && !placeholder;
+    });
+    const unlabeledInteractive = [...html.matchAll(/<(button|a\b)[^>]*>/gi)].filter((m) => {
+      const tag = m[0];
+      const text = html.slice(html.indexOf(tag) + tag.length).match(/^[\s\S]*?<\/(?:button|a)>/i)?.[0]?.replace(/<[^>]+>/g, "").trim();
+      const ariaLabel = /\baria-label=["']/i.test(tag);
+      const ariaLabelledBy = /\baria-labelledby=["']/i.test(tag);
+      const title = /\btitle=["']/i.test(tag);
+      const isButton = /^<button/i.test(tag);
+      const isLink = /^<a\b/i.test(tag);
+      if (isButton) {
+        return !text && !ariaLabel && !ariaLabelledBy && !title;
+      }
+      if (isLink) {
+        const hrefMatch = tag.match(/\bhref=["']([^"']+)["']/i);
+        if (hrefMatch && (hrefMatch[1].startsWith("#") || hrefMatch[1].startsWith("javascript:"))) return false;
+        return !text && !ariaLabel && !ariaLabelledBy && !title && !/[\w\u00C0-\u017F]{3}/.test(tag);
+      }
+      return false;
+    });
+    const iframeTags = [...html.matchAll(/<iframe\b[^>]*>/gi)].map((m) => m[0]);
+    const iframesMissingTitle = iframeTags.filter((tag) => !/\btitle=["']/i.test(tag));
+    const prefersReducedMotion = /@media[^}]*prefers-reduced-motion/i.test(html);
+    const focusVisibleStyles = /:focus-visible|:focus\b/i.test(html);
+    const langAttr = html.match(/<html[^>]+lang=["']([^"']+)["']/i)?.[1];
+
+    const accessibilityChecks: SeoCheck[] = [
+      {
+        key: "lang-attribute",
+        label: "HTML lang-Attribut",
+        ok: !!langAttr,
+        value: langAttr ?? "-",
+        advice: !langAttr ? "Kein lang-Attribut auf <html>." : undefined,
+        howToFix: !langAttr ? 'Füge <html lang="de"> (oder passende Sprache) hinzu.' : undefined,
+        location: "HTML-Root-Element.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/lang",
+      },
+      {
+        key: "skip-link",
+        label: "Sprunglink / Skip-Link",
+        ok: skipLinkFound,
+        value: skipLinkFound ? "gefunden" : "fehlt",
+        advice: !skipLinkFound ? "Kein Sprunglink zum Hauptinhalt erkannt." : undefined,
+        howToFix: !skipLinkFound
+          ? 'Füge ganz oben im <body> einen Link hinzu: <a href="#main">Zum Inhalt springen</a> und verbinde <main id="main">.'
+          : undefined,
+        location: "Body-Start / Template.",
+        learnMore: "https://www.w3.org/WAI/WCAG21/Understanding/bypass-blocks.html",
+      },
+      {
+        key: "form-labels",
+        label: "Formularfelder mit Beschriftung",
+        ok: formInputTags.length === 0 || formInputsMissingLabel.length === 0,
+        value: `${formInputTags.length - formInputsMissingLabel.length}/${formInputTags.length}`,
+        advice: formInputTags.length > 0 && formInputsMissingLabel.length > 0
+          ? `${formInputsMissingLabel.length} Feld(er) ohne <label>, aria-label oder aria-labelledby.`
+          : undefined,
+        howToFix: formInputTags.length > 0 && formInputsMissingLabel.length > 0
+          ? "Verknüpfe jedes Eingabefeld mit einem <label for=\"id\"> oder aria-label/aria-labelledby."
+          : undefined,
+        location: "Formulare im HTML/Template.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/label",
+      },
+      {
+        key: "interactive-labels",
+        label: "Interaktive Elemente mit Beschriftung",
+        ok: unlabeledInteractive.length === 0,
+        value: `${unlabeledInteractive.length} ohne Text`,
+        advice: unlabeledInteractive.length > 0
+          ? `${unlabeledInteractive.length} Button(s)/Link(s) ohne erkennbaren Text.`
+          : undefined,
+        howToFix: unlabeledInteractive.length > 0
+          ? "Füge sichtbaren Text, aria-label oder title zu Buttons und Links hinzu."
+          : undefined,
+        location: "HTML/Template/Navigation.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Attributes/aria-label",
+      },
+      {
+        key: "iframe-title",
+        label: "Iframes mit title",
+        ok: iframeTags.length === 0 || iframesMissingTitle.length === 0,
+        value: `${iframeTags.length - iframesMissingTitle.length}/${iframeTags.length}`,
+        advice: iframeTags.length > 0 && iframesMissingTitle.length > 0
+          ? `${iframesMissingTitle.length} iframe(s) ohne title-Attribut.`
+          : undefined,
+        howToFix: iframeTags.length > 0 && iframesMissingTitle.length > 0
+          ? 'Füge jedem iframe ein title-Attribut hinzu: <iframe title=\"Beschreibung des Inhalts\">.'
+          : undefined,
+        location: "HTML/Embeds.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/iframe#title",
+      },
+      {
+        key: "reduced-motion",
+        label: "prefers-reduced-motion beachtet",
+        ok: prefersReducedMotion,
+        value: prefersReducedMotion ? "ja" : "nein",
+        advice: !prefersReducedMotion
+          ? "Keine @media (prefers-reduced-motion) Regel gefunden."
+          : undefined,
+        howToFix: !prefersReducedMotion
+          ? "Respektiere prefers-reduced-motion:reduce und deaktiviere Animationen für diese Nutzer."
+          : undefined,
+        location: "CSS / Tailwind-Konfiguration.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/CSS/@media/prefers-reduced-motion",
+      },
+      {
+        key: "focus-visible",
+        label: "Fokus-Styles sichtbar",
+        ok: focusVisibleStyles,
+        value: focusVisibleStyles ? "gefunden" : "fehlt",
+        advice: !focusVisibleStyles
+          ? "Keine :focus oder :focus-visible Styles erkannt – Tastaturnutzer sehen evtl. nicht, wo sie sind."
+          : undefined,
+        howToFix: !focusVisibleStyles
+          ? "Definiere sichtbare :focus-visible { outline: ... } Styles im CSS."
+          : undefined,
+        location: "Global CSS / Tailwind-Konfiguration.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/CSS/:focus-visible",
+      },
+      {
+        key: "alt-texts",
+        label: "Bilder mit Alt-Text",
+        ok: images.length === 0 || images.every((img) => img.alt !== null || img.inline),
+        value: `${images.filter((img) => img.alt !== null || img.inline).length}/${images.length}`,
+        advice: images.length > 0 && !images.every((img) => img.alt !== null || img.inline)
+          ? "Mindestens ein nicht-inline Bild ohne alt-Attribut."
+          : undefined,
+        howToFix: images.length > 0 && !images.every((img) => img.alt !== null || img.inline)
+          ? "Füge allen inhaltlich relevanten Bildern ein alt-Attribut hinzu (oder alt=\"\" für Dekobilder)."
+          : undefined,
+        location: "HTML/Template/CMS-Inhalt.",
+        learnMore: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/img#alt",
+      },
+    ];
+
     const seoScore = scoreFromChecks(seoPassed, seoChecks.length);
     const secScore = scoreFromChecks(secPassed, securityHeaders.length);
-    // Mobile checks
     const viewportMeta = viewport;
     const hasViewport = !!viewportMeta;
     const viewportResponsive =
@@ -3210,9 +3766,12 @@ export const analyzeSite = createServerFn({ method: "POST" })
       wpScore = scoreFromChecks(wpPassed, wpChecks.length);
     }
 
+    const accessibilityPassed = accessibilityChecks.filter((c) => c.ok).length;
+    const accessibilityScore = scoreFromChecks(accessibilityPassed, accessibilityChecks.length);
+
     const overall = Math.round(
-      (seoScore + secScore + perfScore + complianceScore + mobileScore + businessScore + wpScore) /
-        7,
+      (seoScore + secScore + perfScore + complianceScore + accessibilityScore + mobileScore + businessScore + wpScore) /
+        8,
     );
 
     const architecture = buildArchitecture(tech, headers, html);
@@ -3255,6 +3814,26 @@ export const analyzeSite = createServerFn({ method: "POST" })
       backendHosting.push(...apiHostingResults);
     }
 
+    const apiKey = process.env.PAGESPEED_API_KEY;
+    const modernImageCount = images.filter((img) => /webp|avif|svg/.test(img.format ?? "")).length;
+    const lazyImageCount = images.filter((img) => img.lazy || img.inline).length;
+    const hasCompression = /gzip|br|deflate|zstd/i.test(headers["content-encoding"] ?? "");
+    const downloadKb = Math.round(new Blob([html]).size / 102.4) / 10;
+    let pageSpeed: PageSpeedResult;
+    if (apiKey && apiKey.length > 10) {
+      pageSpeed = await fetchPageSpeedInsights(finalUrl, apiKey);
+    } else {
+      pageSpeed = estimatePageSpeed(
+        ttfb,
+        downloadKb,
+        scriptSrcs.length,
+        imgSrcs.length,
+        imgSrcs.length ? modernImageCount / imgSrcs.length : 1,
+        imgSrcs.length ? lazyImageCount / imgSrcs.length : 1,
+        hasCompression,
+      );
+    }
+
     return {
       url: startUrl,
       finalUrl,
@@ -3270,6 +3849,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
         security: secScore,
         performance: perfScore,
         compliance: complianceScore,
+        accessibility: accessibilityScore,
         mobile: mobileScore,
         business: businessScore,
         wordpress: wpScore,
@@ -3295,6 +3875,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
       seoChecks,
       perfChecks,
       complianceChecks,
+      accessibilityChecks,
       mobileChecks,
       businessChecks,
       wpChecks,
@@ -3313,8 +3894,22 @@ export const analyzeSite = createServerFn({ method: "POST" })
         scripts: scriptSrcs.length,
         stylesheets: styleHrefs.length,
         images: imgSrcs.length,
+        nofollow: nofollowCount,
+        topDomains,
       },
-      headings: { h1: h1s.length, h2: h2Count, h3: h3Count, h1Text: h1s.slice(0, 5) },
+      linksDetailed,
+      images,
+      headings: {
+        h1: h1s.length,
+        h2: h2Count,
+        h3: h3Count,
+        h4: h4Count,
+        h5: h5Count,
+        h6: h6Count,
+        h1Text: h1s.slice(0, 5),
+        structure,
+      },
+      schemas,
       socials,
       socialHowTo,
       architecture,
@@ -3323,6 +3918,9 @@ export const analyzeSite = createServerFn({ method: "POST" })
       externalApis,
       backendHosting,
       http,
+      mixedContent,
+      pwa,
+      pageSpeed,
       errors,
       warnings,
     };
