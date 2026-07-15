@@ -639,6 +639,20 @@ function Results({ result }: { result: AnalyzeResult }) {
           </Chip>
           <Chip icon={<FileText className="h-3 w-3" />}>{result.timings.downloadKb}KB HTML</Chip>
           <Chip icon={<Code2 className="h-3 w-3" />}>{result.links.scripts} Scripts</Chip>
+          {result.wpRestApiStatus && (
+            <Chip
+              icon={<Globe className="h-3 w-3" />}
+              variant={
+                result.wpRestApiStatus.includes("blockiert")
+                  ? "success"
+                  : result.wpRestApiStatus.includes("Benutzer auflistbar")
+                    ? "danger"
+                    : "warning"
+              }
+            >
+              REST API: {result.wpRestApiStatus}
+            </Chip>
+          )}
         </div>
       </div>
 

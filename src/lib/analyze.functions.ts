@@ -115,6 +115,7 @@ export interface AnalyzeResult {
   mobileChecks: SeoCheck[];
   businessChecks: SeoCheck[];
   wpChecks: SeoCheck[];
+  wpRestApiStatus?: string;
   headers: Record<string, string>;
   securityHeaders: SecurityHeader[];
   cookies: {
@@ -2889,12 +2890,14 @@ export const analyzeSite = createServerFn({ method: "POST" })
       /WordPress[ /]?(\d+\.\d+(\.\d+)?)/i.test(generator ?? "");
     let wpChecks: SeoCheck[] = [];
     let wpScore = 0;
+    let restApiStatus: string | undefined;
     if (isWordPress) {
       const wpAdminUrl = new URL("/wp-admin/", finalUrl).toString();
       const wpLoginUrl = new URL("/wp-login.php", finalUrl).toString();
       const xmlRpcUrl = new URL("/xmlrpc.php", finalUrl).toString();
+      const restRootUrl = new URL("/wp-json/", finalUrl).toString();
       const restUsersUrl = new URL("/wp-json/wp/v2/users/", finalUrl).toString();
-      const [wpAdminRes, wpLoginRes, xmlRpcRes, restUsersRes] = await Promise.all([
+      const [wpAdminRes, wpLoginRes, xmlRpcRes, restRootRes, restUsersRes] = await Promise.all([
         fetchWithTimeout(wpAdminUrl, { method: "HEAD", redirect: "manual" }, 5000).catch(
           () => ({ status: 0 }) as Response,
         ),
@@ -2904,6 +2907,9 @@ export const analyzeSite = createServerFn({ method: "POST" })
         fetchWithTimeout(xmlRpcUrl, { method: "HEAD", redirect: "manual" }, 5000).catch(
           () => ({ status: 0 }) as Response,
         ),
+        fetchWithTimeout(restRootUrl, { method: "GET", redirect: "manual" }, 5000).catch(
+          () => ({ status: 0 }) as Response,
+        ),
         fetchWithTimeout(restUsersUrl, { method: "GET", redirect: "manual" }, 5000).catch(
           () => ({ status: 0 }) as Response,
         ),
@@ -2911,7 +2917,13 @@ export const analyzeSite = createServerFn({ method: "POST" })
       const wpAdminReachable = wpAdminRes.status >= 200 && wpAdminRes.status < 400;
       const wpLoginReachable = wpLoginRes.status >= 200 && wpLoginRes.status < 400;
       const xmlRpcReachable = xmlRpcRes.status === 405 || xmlRpcRes.status === 200;
+      const restApiActive = restRootRes.status === 200;
       const restUsersReachable = restUsersRes.status === 200;
+      const restApiStatus = restApiActive
+        ? restUsersReachable
+          ? "aktiv (Benutzer auflistbar)"
+          : "aktiv (Benutzer blockiert)"
+        : "blockiert / deaktiviert";
 
       const wpPlugins = [
         ...new Set(
@@ -3213,6 +3225,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
       mobileChecks,
       businessChecks,
       wpChecks,
+      wpRestApiStatus: isWordPress ? restApiStatus : undefined,
       headers,
       securityHeaders,
       cookies,
