@@ -116,6 +116,14 @@ export interface AnalyzeResult {
   businessChecks: SeoCheck[];
   wpChecks: SeoCheck[];
   wpRestApiStatus?: string;
+  cookieBanner: {
+    detected: boolean;
+    tool: string | null;
+    needsBanner: boolean;
+    trackingServices: string[];
+    nonEssentialCookies: boolean;
+    recommendation: string;
+  };
   headers: Record<string, string>;
   securityHeaders: SecurityHeader[];
   cookies: {
@@ -2326,12 +2334,65 @@ export const analyzeSite = createServerFn({ method: "POST" })
         html,
       ) ||
       /data-testid\s*=\s*["'][^"']*(cookie|consent|gdpr)[^"']*["']/i.test(html) ||
+      /data-[^=\s]*\s*=\s*["'][^"']*(cmplz|borlabs|cky|cookieyes|usercentrics|onetrust|osano|iubenda|tarteaucitron|quantcast|termly|hs-banner|hubspot-cookie|cookiebot)[^"']*["']/i.test(
+        html,
+      ) ||
+      /<script[^>]*src=["'][^"']*(complianz|borlabs|cookieyes|cookiebot|usercentrics|onetrust|osano|iubenda|tarteaucitron|quantcast|termly|hubspot-cookie|hs-banner|cmp-v2|cmplz)[^"']*/i.test(
+        html,
+      ) ||
+      /window\.(cmplz_|borlabsCookie_|cookieyes_|Usercentrics|Onetrust|Osano|iubenda|tarteaucitron|quantcast_|ucCmp)/i.test(
+        html,
+      ) ||
       techCategories.has("privacy");
     const cookieBannerFixed = /position\s*:\s*fixed/i.test(html);
     const cookieBannerOk = !cookieBannerHtml || cookieBannerFixed;
     const nonEssentialCookies = cookies.some((c) =>
       ["analytics", "marketing", "third-party"].includes(c.category),
     );
+
+    const consentToolNames = [
+      { name: "CookieYes", pattern: /cookieyes|cy-consent|cky-consent/i },
+      { name: "Cookiebot", pattern: /cookiebot|CookieConsent/i },
+      { name: "Usercentrics", pattern: /usercentrics|uc-block/i },
+      { name: "OneTrust / CookiePro", pattern: /onetrust|cookiepro|optanon/i },
+      { name: "Osano", pattern: /osano|cmp-v2/i },
+      { name: "iubenda", pattern: /iubenda|_iubenda/i },
+      { name: "Complianz", pattern: /complianz|cmplz/i },
+      { name: "Borlabs Cookie", pattern: /borlabs|borlabs-cookie/i },
+      { name: "Real Cookie Banner", pattern: /real-cookie-banner/i },
+      { name: "Tarte au Citron", pattern: /tarteaucitron/i },
+      { name: "HubSpot Cookie Banner", pattern: /hs-banner|hubspot-cookie/i },
+      { name: "Termly", pattern: /termly|termly-consent/i },
+      { name: "TrustArc", pattern: /trustarc/i },
+      { name: "Quantcast Choice", pattern: /quantcast|qc-cmp/i },
+    ];
+    const detectedTool =
+      consentToolNames.find((t) => t.pattern.test(html)) ??
+      consentToolNames.find((t) =>
+        consentToolNames
+          .flatMap((t) => [t.name.toLowerCase().replace(/\s+/g, "-")])
+          .some(() => /cmplz|borlabs|cookieyes|cookiebot/i.test(html)),
+      );
+    const bannerToolName = detectedTool?.name ?? (hasConsentTool ? "Bekanntes Tool" : null);
+
+    const cookieBanner = {
+      detected: cookieBannerHtml,
+      tool: bannerToolName,
+      needsBanner: needsConsentTool,
+      trackingServices: [
+        ...new Set(
+          tech
+            .filter((t) => ["analytics", "ads", "marketing"].includes(t.category))
+            .map((t) => t.name),
+        ),
+      ],
+      nonEssentialCookies,
+      recommendation: needsConsentTool
+        ? cookieBannerHtml
+          ? "Cookie-Banner erkannt – prüfe, ob Marketing/Analytics vor Zustimmung blockiert werden."
+          : "Kein Cookie-Banner erkannt, aber Tracking-Dienste/Cookies vorhanden. Consent-Manager empfohlen."
+        : "Kein Banner nötig, da keine nicht-essentiellen Tracker erkannt wurden.",
+    };
 
     const complianceChecks: SeoCheck[] = [
       {
@@ -3238,6 +3299,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
       businessChecks,
       wpChecks,
       wpRestApiStatus: isWordPress ? restApiStatus : undefined,
+      cookieBanner,
       headers,
       securityHeaders,
       cookies,

@@ -48,6 +48,7 @@ import {
   FileJson,
 } from "lucide-react";
 import { analyzeSite, type AnalyzeResult } from "@/lib/analyze.functions";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -610,18 +611,18 @@ function Results({ result }: { result: AnalyzeResult }) {
       </div>
 
       {/* URL bar */}
-      <div className="rounded-2xl border border-border/60 bg-card/50 backdrop-blur p-5 flex flex-wrap items-center gap-4">
+      <div className="rounded-2xl border border-border/60 bg-card/50 backdrop-blur p-4 flex flex-col sm:flex-row items-start sm:items-center gap-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           {result.meta.favicon ? (
             <img
               src={new URL(result.meta.favicon, result.finalUrl).toString()}
               alt=""
-              className="h-8 w-8 rounded"
+              className="h-10 w-10 rounded"
               onError={(e) => (e.currentTarget.style.display = "none")}
             />
           ) : (
-            <div className="h-8 w-8 rounded bg-muted grid place-items-center">
-              <Globe className="h-4 w-4" />
+            <div className="h-10 w-10 rounded bg-muted grid place-items-center">
+              <Globe className="h-5 w-5" />
             </div>
           )}
           <div className="min-w-0">
@@ -673,85 +674,76 @@ function Results({ result }: { result: AnalyzeResult }) {
               </Tooltip>
             </TooltipProvider>
           )}
+          <TooltipProvider delayDuration={100}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Chip
+                    icon={<Cookie className="h-3 w-3" />}
+                    variant={
+                      result.cookieBanner.needsBanner
+                        ? result.cookieBanner.detected
+                          ? "success"
+                          : "danger"
+                        : "default"
+                    }
+                  >
+                    Cookies:{" "}
+                    {result.cookieBanner.needsBanner
+                      ? result.cookieBanner.detected
+                        ? "Banner aktiv"
+                        : "Banner fehlt"
+                      : "keiner nötig"}
+                  </Chip>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="max-w-xs">
+                <p>{result.cookieBanner.recommendation}</p>
+                {result.cookieBanner.trackingServices.length > 0 && (
+                  <p className="mt-1 text-[10px] opacity-80">
+                    Dienste: {result.cookieBanner.trackingServices.join(", ")}
+                  </p>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
 
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList className="bg-card/50 backdrop-blur border border-border/60 flex-wrap h-auto">
+        <TabsList className="bg-card/50 backdrop-blur border border-border/60 h-auto flex flex-wrap gap-1 p-1.5 justify-center">
           <TabsTrigger value="overview" title="Meta, Struktur und Signale auf einen Blick">
             Übersicht
           </TabsTrigger>
           <TabsTrigger
             value="tech"
-            title="Alle erkannten Technologien: Frameworks, Analytics, Pixel, CDN, Sprachen, Datenbanken …"
+            title="Technologien, Architektur und Verbindungen"
           >
-            Tech-Stack ({result.tech.length})
+            Tech ({result.tech.length})
           </TabsTrigger>
-          <TabsTrigger value="graph" title="Interaktiver Verbindungs-Graph aller Technologien">
-            Verbindungen
-          </TabsTrigger>
-          <TabsTrigger
-            value="seo"
-            title="SEO-Checks: Title, Description, Canonical, OG, Alt-Texte …"
-          >
+          <TabsTrigger value="seo" title="SEO-Checks und Keyword-Ranking">
             SEO
-          </TabsTrigger>
-          <TabsTrigger
-            value="keywords"
-            title="Keyword-Ranking-Check: Wie wird die Seite bei Google gefunden?"
-          >
-            Keywords
           </TabsTrigger>
           <TabsTrigger value="security" title="Security-Header und Cookie-Flags">
             Security
           </TabsTrigger>
-          <TabsTrigger
-            value="perf"
-            title="Performance-Signale: TTFB, Payload, Kompression, Caching"
-          >
+          <TabsTrigger value="perf" title="Performance, Mobile und responsive Vorschau">
             Performance
-          </TabsTrigger>
-          <TabsTrigger value="crawl" title="robots.txt und sitemap.xml">
-            Robots & Sitemap
-          </TabsTrigger>
-          <TabsTrigger
-            value="architecture"
-            title="Architektur: Frontend, Backend, CMS, Server, Hosting"
-          >
-            Architektur
           </TabsTrigger>
           <TabsTrigger value="compliance" title="DSGVO/TDDDG und BITV 2.0 / Barrierefreiheit">
             Recht & BITV
           </TabsTrigger>
-          <TabsTrigger
-            value="mobile"
-            title="Mobile-Optimierung: Viewport, Responsive, Touch-Targets, Frameworks"
-          >
-            Mobile
-          </TabsTrigger>
-          <TabsTrigger
-            value="business"
-            title="Business-/UX-Checks: Kontakte, Layout, Pop-ups, Menü, Formulare"
-          >
+          <TabsTrigger value="business" title="Business-/UX-Checks">
             Business
           </TabsTrigger>
-          <TabsTrigger
-            value="preview"
-            title="Responsive Vorschau: Desktop, Tablet, Mobile"
-          >
-            Vorschau
+          <TabsTrigger value="crawl" title="robots.txt, Sitemap und Header">
+            Crawl & Raw
           </TabsTrigger>
           {result.wpChecks.length > 0 && (
-            <TabsTrigger
-              value="wordpress"
-              title="WordPress-spezifische Security- und Performance-Checks"
-            >
+            <TabsTrigger value="wordpress" title="WordPress-spezifische Checks">
               WordPress
             </TabsTrigger>
           )}
-          <TabsTrigger value="raw" title="Alle HTTP Response-Header">
-            Headers
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="grid gap-4 lg:grid-cols-2">
@@ -833,39 +825,57 @@ function Results({ result }: { result: AnalyzeResult }) {
         </TabsContent>
 
         <TabsContent value="tech">
-          <TechGrid result={result} />
-        </TabsContent>
-
-        <TabsContent value="graph">
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              So hängt der Stack zusammen. Ziehen, zoomen, entdecken.
-            </p>
-            <ConnectionsGraph result={result} />
-          </div>
+          <Tabs defaultValue="stack" className="space-y-4">
+            <TabsList className="bg-card/50 backdrop-blur border border-border/60 h-auto flex flex-wrap gap-1 p-1.5">
+              <TabsTrigger value="stack">Tech-Stack</TabsTrigger>
+              <TabsTrigger value="graph">Verbindungen</TabsTrigger>
+              <TabsTrigger value="architecture">Architektur</TabsTrigger>
+            </TabsList>
+            <TabsContent value="stack">
+              <TechGrid result={result} />
+            </TabsContent>
+            <TabsContent value="graph">
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  So hängt der Stack zusammen. Ziehen, zoomen, entdecken.
+                </p>
+                <ConnectionsGraph result={result} />
+              </div>
+            </TabsContent>
+            <TabsContent value="architecture" className="grid gap-4 lg:grid-cols-2">
+              <ArchitecturePanel result={result} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="seo">
-          <Panel title="SEO Checks" icon={<Sparkles className="h-4 w-4" />}>
-            <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
-              <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>
-                Tippe einen Check an, der rot ist - du siehst dann, wo du die Einstellung findest
-                und wie du ihn behebst.
-              </span>
-            </div>
-            <ul className="divide-y divide-border/50">
-              {result.seoChecks.map((c) => (
-                <SeoCheckItem key={c.key} c={c} />
-              ))}
-            </ul>
-          </Panel>
-        </TabsContent>
-
-        <TabsContent value="keywords">
-          <Panel title="Keyword-Ranking-Check" icon={<Search className="h-4 w-4" />}>
-            <KeywordRankChecker result={result} />
-          </Panel>
+          <Tabs defaultValue="checks" className="space-y-4">
+            <TabsList className="bg-card/50 backdrop-blur border border-border/60 h-auto flex flex-wrap gap-1 p-1.5">
+              <TabsTrigger value="checks">SEO-Checks</TabsTrigger>
+              <TabsTrigger value="keywords">Keywords</TabsTrigger>
+            </TabsList>
+            <TabsContent value="checks">
+              <Panel title="SEO Checks" icon={<Sparkles className="h-4 w-4" />}>
+                <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
+                  <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    Tippe einen Check an, der rot ist - du siehst dann, wo du die Einstellung findest
+                    und wie du ihn behebst.
+                  </span>
+                </div>
+                <ul className="divide-y divide-border/50">
+                  {result.seoChecks.map((c) => (
+                    <SeoCheckItem key={c.key} c={c} />
+                  ))}
+                </ul>
+              </Panel>
+            </TabsContent>
+            <TabsContent value="keywords">
+              <Panel title="Keyword-Ranking-Check" icon={<Search className="h-4 w-4" />}>
+                <KeywordRankChecker result={result} />
+              </Panel>
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="security" className="grid gap-4 lg:grid-cols-2">
@@ -911,24 +921,72 @@ function Results({ result }: { result: AnalyzeResult }) {
         </TabsContent>
 
         <TabsContent value="perf">
-          <Panel title="Performance-Signale" icon={<Zap className="h-4 w-4" />}>
-            <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
-              <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>
-                Rot bedeutet: hier lässt sich Geschwindigkeit holen. Jeder Punkt zeigt, wo du
-                ansetzt und wo die Einstellung sitzt.
-              </span>
-            </div>
-            <ul className="divide-y divide-border/50">
-              {result.perfChecks.map((c) => (
-                <SeoCheckItem key={c.key} c={c} />
-              ))}
-            </ul>
-          </Panel>
-        </TabsContent>
-
-        <TabsContent value="preview">
-          <ResponsivePreview url={result.finalUrl} />
+          <Tabs defaultValue="signals" className="space-y-4">
+            <TabsList className="bg-card/50 backdrop-blur border border-border/60 h-auto flex flex-wrap gap-1 p-1.5">
+              <TabsTrigger value="signals">Performance-Signale</TabsTrigger>
+              <TabsTrigger value="mobile">Mobile</TabsTrigger>
+              <TabsTrigger value="preview">Vorschau</TabsTrigger>
+            </TabsList>
+            <TabsContent value="signals">
+              <Panel title="Performance-Signale" icon={<Zap className="h-4 w-4" />}>
+                <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
+                  <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    Rot bedeutet: hier lässt sich Geschwindigkeit holen. Jeder Punkt zeigt, wo du
+                    ansetzt und wo die Einstellung sitzt.
+                  </span>
+                </div>
+                <ul className="divide-y divide-border/50">
+                  {result.perfChecks.map((c) => (
+                    <SeoCheckItem key={c.key} c={c} />
+                  ))}
+                </ul>
+              </Panel>
+            </TabsContent>
+            <TabsContent value="mobile">
+              <Panel title="Mobile-Optimierung" icon={<Smartphone className="h-4 w-4" />}>
+                <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
+                  <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    Heuristische Prüfung auf Mobil-Tauglichkeit: Viewport, Responsive-CSS, Zoom,
+                    Touch-Target-Größen und bekannte responsive Frameworks. Kein Ersatz für echte
+                    Geräte-Tests.
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                  <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
+                    <Smartphone className="h-5 w-5 mx-auto mb-1 text-emerald-400" />
+                    <div className="text-xs text-muted-foreground">Smartphone</div>
+                    <div className="text-sm font-medium">
+                      {result.mobileChecks.find((c) => c.key === "viewport")?.ok ? "bereit" : "prüfen"}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
+                    <Tablet className="h-5 w-5 mx-auto mb-1 text-emerald-400" />
+                    <div className="text-xs text-muted-foreground">Tablet</div>
+                    <div className="text-sm font-medium">
+                      {result.mobileChecks.find((c) => c.key === "responsive-css")?.ok
+                        ? "bereit"
+                        : "prüfen"}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
+                    <Monitor className="h-5 w-5 mx-auto mb-1 text-emerald-400" />
+                    <div className="text-xs text-muted-foreground">Desktop</div>
+                    <div className="text-sm font-medium">baseline</div>
+                  </div>
+                </div>
+                <ul className="divide-y divide-border/50">
+                  {result.mobileChecks.map((c) => (
+                    <SeoCheckItem key={c.key} c={c} />
+                  ))}
+                </ul>
+              </Panel>
+            </TabsContent>
+            <TabsContent value="preview">
+              <ResponsivePreview url={result.finalUrl} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="crawl" className="grid gap-4 lg:grid-cols-2">
@@ -969,10 +1027,19 @@ function Results({ result }: { result: AnalyzeResult }) {
               <div className="text-sm text-muted-foreground">Keine sitemap.xml entdeckt.</div>
             )}
           </Panel>
-        </TabsContent>
-
-        <TabsContent value="architecture" className="grid gap-4 lg:grid-cols-2">
-          <ArchitecturePanel result={result} />
+          <Panel title="Response Headers" icon={<Cpu className="h-4 w-4" />} className="lg:col-span-2">
+            <div className="grid gap-1 text-xs font-mono max-h-[600px] overflow-auto">
+              {Object.entries(result.headers).map(([k, v]) => (
+                <div
+                  key={k}
+                  className="flex items-start gap-3 py-1.5 px-2 rounded hover:bg-background/50 border-b border-border/30 last:border-0"
+                >
+                  <span className="shrink-0 w-40 text-muted-foreground">{k}</span>
+                  <span className="break-all">{v}</span>
+                </div>
+              ))}
+            </div>
+          </Panel>
         </TabsContent>
 
         <TabsContent value="compliance">
@@ -1189,13 +1256,15 @@ function Panel({
   title,
   icon,
   children,
+  className,
 }: {
   title: string;
   icon: React.ReactNode;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-card/50 backdrop-blur p-5">
+    <div className={cn("rounded-2xl border border-border/60 bg-card/50 backdrop-blur p-5", className)}>
       <div className="flex items-center gap-2 mb-4 text-sm font-semibold">
         {icon}
         {title}
@@ -1269,24 +1338,32 @@ function HowToFix({
   howToFix,
   location,
   learnMore,
+  ok,
 }: {
   howToFix?: string;
   location?: string;
   learnMore?: string;
+  ok?: boolean;
 }) {
   if (!howToFix && !location) return null;
+  const wrapperClass = ok
+    ? "border-border/30 bg-background/40"
+    : "border-amber-500/20 bg-amber-500/5";
+  const textClass = ok ? "text-muted-foreground" : "text-amber-100/90";
   return (
-    <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-xs space-y-2">
+    <div className={`mt-2 rounded-lg border p-3 text-xs space-y-2 ${wrapperClass}`}>
       {howToFix && (
         <div className="flex gap-2">
-          <Wrench className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-          <span className="text-amber-100/90 leading-relaxed">{howToFix}</span>
+          <Wrench className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${ok ? "text-muted-foreground" : "text-amber-400"}`} />
+          <span className={`leading-relaxed ${textClass}`}>{howToFix}</span>
         </div>
       )}
       {location && (
         <div className="flex gap-2">
-          <HelpCircle className="h-3.5 w-3.5 text-sky-400 shrink-0 mt-0.5" />
-          <span className="text-sky-100/80 leading-relaxed">{location}</span>
+          <HelpCircle className={`h-3.5 w-3.5 shrink-0 mt-0.5 ${ok ? "text-muted-foreground" : "text-sky-400"}`} />
+          <span className={ok ? "text-muted-foreground leading-relaxed" : "text-sky-100/80 leading-relaxed"}>
+            {location}
+          </span>
         </div>
       )}
       {learnMore && (
@@ -1329,8 +1406,14 @@ function SeoCheckItem({ c }: { c: AnalyzeResult["seoChecks"][number] }) {
             )}
           </div>
           <div className="text-xs text-muted-foreground truncate">{c.value}</div>
-          {c.advice && !c.ok && <div className="text-xs text-amber-400/90 mt-1">{c.advice}</div>}
-          {!c.ok && <HowToFix howToFix={c.howToFix} location={c.location} learnMore={c.learnMore} />}
+          {c.advice && (
+            <div className={`text-xs mt-1 ${c.ok ? "text-muted-foreground" : "text-amber-400/90"}`}>
+              {c.advice}
+            </div>
+          )}
+          {(c.howToFix || c.location || c.learnMore) && (
+            <HowToFix howToFix={c.howToFix} location={c.location} learnMore={c.learnMore} ok={c.ok} />
+          )}
         </div>
       </button>
       {open && hasFindings && (
@@ -1448,7 +1531,14 @@ function CookieConsentPanel({ result }: { result: AnalyzeResult }) {
           </div>
         </div>
         <div className="rounded-lg border border-border/50 bg-background/40 p-3">
-          <div className="text-xs text-muted-foreground mb-1">Banner erkannt</div>
+          <div className="text-xs text-muted-foreground mb-1">
+            Banner erkannt
+            {result.cookieBanner.tool && (
+              <span className="ml-1 text-[10px] text-muted-foreground/70">
+                ({result.cookieBanner.tool})
+              </span>
+            )}
+          </div>
           <div className="text-sm font-medium flex items-center gap-1.5">
             {bannerCheck?.ok ? (
               <>
@@ -1480,6 +1570,26 @@ function CookieConsentPanel({ result }: { result: AnalyzeResult }) {
           </div>
         </div>
       </div>
+      <div className="mt-4 rounded-lg border border-border/50 bg-background/40 p-3">
+        <div className="text-xs text-muted-foreground mb-1">Einschätzung</div>
+        <div className="text-sm leading-relaxed">{result.cookieBanner.recommendation}</div>
+      </div>
+
+      {result.cookieBanner.trackingServices.length > 0 && (
+        <div className="mt-4">
+          <div className="text-xs text-muted-foreground mb-2">
+            Tracking- & Marketing-Dienste
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {result.cookieBanner.trackingServices.map((service) => (
+              <Badge key={service} variant="outline" className="text-[10px]">
+                {service}
+              </Badge>
+            ))}
+          </div>
+        </div>
+      )}
+
       {nonEssentialCookies.length > 0 && (
         <div className="mt-4">
           <div className="text-xs text-muted-foreground mb-2">Nicht-notwendige Cookies</div>
