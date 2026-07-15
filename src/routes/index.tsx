@@ -701,6 +701,12 @@ function Results({ result }: { result: AnalyzeResult }) {
           >
             Business
           </TabsTrigger>
+          <TabsTrigger
+            value="preview"
+            title="Responsive Vorschau: Desktop, Tablet, Mobile"
+          >
+            Vorschau
+          </TabsTrigger>
           {result.wpChecks.length > 0 && (
             <TabsTrigger
               value="wordpress"
@@ -885,6 +891,10 @@ function Results({ result }: { result: AnalyzeResult }) {
               ))}
             </ul>
           </Panel>
+        </TabsContent>
+
+        <TabsContent value="preview">
+          <ResponsivePreview url={result.finalUrl} />
         </TabsContent>
 
         <TabsContent value="crawl" className="grid gap-4 lg:grid-cols-2">
@@ -1449,6 +1459,203 @@ function CookieConsentPanel({ result }: { result: AnalyzeResult }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+type DeviceMode = "desktop" | "tablet" | "mobile";
+
+const DEVICE_SIZES: Record<DeviceMode, { width: number; height: number; label: string; icon: React.ReactNode }> = {
+  desktop: { width: 1280, height: 800, label: "Desktop", icon: <Monitor className="h-4 w-4" /> },
+  tablet: { width: 768, height: 1024, label: "Tablet", icon: <Tablet className="h-4 w-4" /> },
+  mobile: { width: 375, height: 812, label: "Mobile", icon: <Smartphone className="h-4 w-4" /> },
+};
+
+function ResponsivePreview({ url }: { url: string }) {
+  const [mode, setMode] = useState<DeviceMode>("desktop");
+  const [scale, setScale] = useState(1);
+  const [blocked, setBlocked] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const { width } = containerRef.current.getBoundingClientRect();
+    const desired = DEVICE_SIZES[mode].width + 48;
+    setScale(Math.min(1, width / desired));
+  }, [mode]);
+
+  const handleLoad = (e: React.SyntheticEvent<HTMLIFrameElement>) => {
+    try {
+      if (e.currentTarget.contentWindow?.location.href === "about:blank") {
+        setBlocked(true);
+      }
+    } catch {
+      setBlocked(true);
+    }
+  };
+
+  return (
+    <>
+      <Panel title="Responsive Vorschau" icon={<Monitor className="h-4 w-4" />}>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {( ["desktop", "tablet", "mobile"] as DeviceMode[]).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                mode === m
+                  ? "border-emerald-500/50 bg-emerald-500/15 text-emerald-300"
+                  : "border-border/60 bg-background/50 hover:bg-card"
+              }`}
+            >
+              {DEVICE_SIZES[m].icon}
+              {DEVICE_SIZES[m].label}
+              <span className="text-muted-foreground tabular-nums">
+                {DEVICE_SIZES[m].width}px
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <div
+          ref={containerRef}
+          className="w-full overflow-auto rounded-xl border border-border/60 bg-muted/20 p-4 flex justify-center min-h-[300px]"
+        >
+          <div
+            style={{
+              width: DEVICE_SIZES[mode].width,
+              height: DEVICE_SIZES[mode].height,
+              transform: `scale(${scale})`,
+              transformOrigin: "top center",
+            }}
+            className="relative rounded-lg border border-border/80 bg-background shadow-2xl overflow-hidden"
+          >
+            {blocked ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center">
+                <XCircle className="h-8 w-8 text-amber-400 mb-2" />
+                <div className="text-sm font-medium">Seite kann nicht eingebettet werden</div>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                  Die Zielseite verbietet das Laden in einem iframe (X-Frame-Options / CSP). Du kannst sie stattdessen direkt in einem neuen Tab öffnen.
+                </p>
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-3 inline-flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground hover:bg-primary/90"
+                >
+                  Seite öffnen <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            ) : (
+              <iframe
+                src={url}
+                title={`Vorschau ${DEVICE_SIZES[mode].label}`}
+                className="absolute inset-0 h-full w-full"
+                style={{ border: 0 }}
+                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                onError={handleLoad}
+              />
+            )}
+          </div>
+        </div>
+      </Panel>
+
+      <ResponsivePerfHint url={url} />
+    </>
+  );
+}
+
+function ResponsivePerfHint({ url }: { url: string }) {
+  const [measurements, setMeasurements] = useState<{ desktop: number | null; mobile: number | null }>({
+    desktop: null,
+    mobile: null,
+  });
+  const [loading, setLoading] = useState(false);
+
+  const measure = async (userAgent: string) => {
+    const start = performance.now();
+    try {
+      await fetch(url, {
+        method: "HEAD",
+        mode: "no-cors",
+        headers: { "User-Agent": userAgent },
+        cache: "no-store",
+      });
+    } catch {
+      // no-cors requests don't throw on network errors for simple cases
+    }
+    return Math.round(performance.now() - start);
+  };
+
+  const runMeasurement = async () => {
+    setLoading(true);
+    const desktopUA =
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    const mobileUA =
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+
+    const [desktop, mobile] = await Promise.all([measure(desktopUA), measure(mobileUA)]);
+    setMeasurements({ desktop, mobile });
+    setLoading(false);
+  };
+
+  const hasData = measurements.desktop !== null && measurements.mobile !== null;
+
+  return (
+    <Panel title="Performance-Vergleich: Desktop vs. Mobile" icon={<Zap className="h-4 w-4" />}>
+      <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
+        <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+        <span>
+          Misst aus deinem Browser die ungefähre Netzwerk-Antwortzeit (TTFB) mit Desktop- und Mobile-User-Agent.
+          Unterschiede entstehen oft durch serverseitiges Device-Routing, unterschiedliche Assets oder CDN-Optimierungen.
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={runMeasurement}
+        disabled={loading}
+        className="inline-flex items-center gap-2 rounded-lg border border-border/60 bg-background/50 px-4 py-2 text-xs font-medium hover:bg-card disabled:opacity-60"
+      >
+        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+        {loading ? "Messe…" : "Desktop vs. Mobile messen"}
+      </button>
+
+      {hasData && (
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="rounded-lg border border-border/50 bg-background/40 p-3">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground mb-1">
+              <Monitor className="h-3.5 w-3.5" /> Desktop
+            </div>
+            <div className="text-xl font-bold tabular-nums">{measurements.desktop}ms</div>
+          </div>
+          <div className="rounded-lg border border-border/50 bg-background/40 p-3">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground mb-1">
+              <Smartphone className="h-3.5 w-3.5" /> Mobile
+            </div>
+            <div className="text-xl font-bold tabular-nums">{measurements.mobile}ms</div>
+          </div>
+        </div>
+      )}
+
+      {hasData && measurements.desktop !== null && measurements.mobile !== null && (
+        <div className="mt-3 text-xs">
+          {measurements.mobile > measurements.desktop * 1.25 ? (
+            <span className="text-amber-400">
+              Mobile ist deutlich langsamer. Prüfe responsive Bilder, vermeidbare Redirects oder
+              serverseitiges Device-Routing.
+            </span>
+          ) : measurements.desktop > measurements.mobile * 1.25 ? (
+            <span className="text-emerald-400">
+              Mobile ist ähnlich schnell oder schneller – gutes Caching / CDN.
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              Desktop und Mobile liegen nah beieinander.
+            </span>
+          )}
         </div>
       )}
     </Panel>
