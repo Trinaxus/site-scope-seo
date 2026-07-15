@@ -50,9 +50,12 @@ import {
   Image as ImageIcon,
   History,
   GitCompare,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { analyzeSite, type AnalyzeResult } from "@/lib/analyze.functions";
 import { loadHistory, saveToHistory, deleteHistoryEntry, type HistoryEntry } from "@/lib/history";
+import { I18nProvider, useI18n, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -88,7 +91,11 @@ export const Route = createFileRoute("/")({
     ],
     links: [{ rel: "canonical", href: "/" }],
   }),
-  component: Home,
+  component: () => (
+    <I18nProvider>
+      <Home />
+    </I18nProvider>
+  ),
 });
 
 function scoreColor(n: number) {
@@ -141,13 +148,35 @@ function playSuccessSound() {
 }
 
 function Home() {
+  const { t, locale, setLocale } = useI18n();
   const [url, setUrl] = useState("");
   const fn = useServerFn(analyzeSite);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
     setHistory(loadHistory());
   }, []);
+
+  useEffect(() => {
+    const onChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen();
+      } else {
+        await document.exitFullscreen();
+      }
+    } catch {
+      // ignore unsupported / blocked
+    }
+  };
 
   const m = useMutation({
     mutationFn: (u: string) => fn({ data: { url: u } }),
@@ -165,7 +194,7 @@ function Home() {
         href="#main"
         className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 z-50 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
       >
-        Zum Hauptinhalt springen
+        {t("skipToMain")}
       </a>
 
       <header className="border-b border-border/60 backdrop-blur-md fixed top-0 left-0 right-0 z-40 bg-background/85">
@@ -175,21 +204,48 @@ function Home() {
               <Radar className="h-5 w-5 text-emerald-400" />
             </div>
             <div className="flex flex-col leading-none">
-              <span className="text-lg">SiteScope</span>
-              <span className="text-[10px] text-muted-foreground tracking-wide">Tech-Radar</span>
+              <span className="text-lg">{t("appTitle")}</span>
+              <span className="text-[10px] text-muted-foreground tracking-wide">{t("appSubtitle")}</span>
             </div>
             <Badge variant="outline" className="ml-1 text-[10px] uppercase tracking-wider">
-              beta
+              {t("beta")}
             </Badge>
           </div>
-          <a
-            href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers"
-            target="_blank"
-            rel="noreferrer"
-            className="text-xs text-muted-foreground hover:text-foreground transition"
-          >
-            Docs
-          </a>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-md border border-border/60 bg-card/50 p-0.5">
+              {(["de", "en"] as Locale[]).map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => setLocale(l)}
+                  className={`px-2 py-1 text-[10px] font-medium rounded transition ${
+                    locale === l
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {l.toUpperCase()}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? t("exitFullscreen") : t("fullscreen")}
+              className="inline-flex items-center justify-center rounded-md p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition"
+              aria-label={isFullscreen ? t("exitFullscreen") : t("fullscreen")}
+            >
+              {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+            </button>
+            <a
+              href="https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers"
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs text-muted-foreground hover:text-foreground transition"
+            >
+              {t("docs")}
+            </a>
+          </div>
         </div>
       </header>
 
@@ -198,14 +254,13 @@ function Home() {
         <section className="text-center max-w-3xl mx-auto">
           <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-card/50 px-3 py-1 text-xs text-muted-foreground mb-6">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            Live-Analyse · SEO · Security · Tech-Radar
+            {t("heroTagline")}
           </div>
           <h1 className="text-4xl sm:text-6xl font-bold tracking-tight bg-linear-to-b from-foreground to-foreground/60 bg-clip-text text-transparent">
-            Der Röntgenblick für jede Website
+            {t("heroTitle")}
           </h1>
           <p className="mt-4 text-muted-foreground text-lg">
-            Gib eine URL ein - WordPress, React-App, klassische Homepage - und sieh den ganzen
-            Stack, alle Signale und Verbindungen.
+            {t("heroSubtitle")}
           </p>
 
           <form
@@ -214,17 +269,17 @@ function Home() {
               if (url.trim()) m.mutate(url);
             }}
             className="mt-8 flex flex-col sm:flex-row gap-4 max-w-2xl mx-auto"
-            aria-label="Website-URL analysieren"
+            aria-label={t("analyze")}
           >
             <div className="relative flex-1">
               <label htmlFor="url-input" className="sr-only">
-                Website-URL
+                {t("urlLabel")}
               </label>
               <Input
                 id="url-input"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="example.com oder https://…"
+                placeholder={t("urlPlaceholder")}
                 className={`h-12 bg-card/60 backdrop-blur text-base transition-all duration-300 outline-none focus-visible:ring-0 focus-visible:ring-offset-0 ${
                   url.trim()
                     ? "border-2 border-emerald-400 shadow-[0_0_18px_2px_rgba(52,211,153,0.35)]"
@@ -233,7 +288,12 @@ function Home() {
                 autoFocus
               />
             </div>
-            <ScanButton pending={m.isPending} disabled={!url.trim()} />
+            <ScanButton
+              pending={m.isPending}
+              disabled={!url.trim()}
+              analyzeLabel={t("analyze")}
+              analyzingLabel={t("analyzing")}
+            />
           </form>
 
           <div className="mt-4 flex flex-wrap gap-2 justify-center text-xs text-muted-foreground">
@@ -256,7 +316,7 @@ function Home() {
           <div className="mt-10 max-w-2xl mx-auto rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-sm text-rose-200 flex items-start gap-3">
             <XCircle className="h-4 w-4 mt-0.5 shrink-0" />
             <div>
-              <div className="font-medium">Analyse fehlgeschlagen</div>
+              <div className="font-medium">{t("analyzeError")}</div>
               <div className="text-rose-300/80">{(m.error as Error)?.message}</div>
             </div>
           </div>
@@ -457,7 +517,17 @@ function TechBackground() {
   );
 }
 
-function ScanButton({ pending, disabled }: { pending: boolean; disabled: boolean }) {
+function ScanButton({
+  pending,
+  disabled,
+  analyzeLabel,
+  analyzingLabel,
+}: {
+  pending: boolean;
+  disabled: boolean;
+  analyzeLabel: string;
+  analyzingLabel: string;
+}) {
   const isDisabled = Boolean(disabled || pending);
   const hasUrl = !disabled && !pending;
   return (
@@ -475,7 +545,7 @@ function ScanButton({ pending, disabled }: { pending: boolean; disabled: boolean
       }`}
     >
       {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-      {pending ? "Analysiere…" : "Analysieren"}
+      {pending ? analyzingLabel : analyzeLabel}
     </Button>
   );
 }
@@ -493,6 +563,7 @@ function Results({
   onDeleteHistory: (id: string) => void;
   analyze: (url: string) => Promise<AnalyzeResult>;
 }) {
+  const { t } = useI18n();
   const [mainTab, setMainTab] = useState("overview");
   const [techSubTab, setTechSubTab] = useState("stack");
   const [seoSubTab, setSeoSubTab] = useState("checks");
@@ -520,10 +591,10 @@ function Results({
       {/* Top summary */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4">
         <ScoreCard
-          label="Overall"
+          label={t("scoreCards.overall")}
           value={result.score.overall}
           icon={<Gauge className="h-4 w-4" />}
-          tooltip="Durchschnitt aus allen Kategorien."
+          tooltip={t("scoreCards.overallTooltip")}
           tab="overview"
           count={
             result.seoChecks.filter((c) => !c.ok).length +
@@ -535,76 +606,76 @@ function Results({
           onNavigate={navigateTo}
         />
         <ScoreCard
-          label="SEO"
+          label={t("scoreCards.seo")}
           value={result.score.seo}
           icon={<Sparkles className="h-4 w-4" />}
-          tooltip="Prüft Title, Meta Description, H1, Canonical, OG, Sprache, Bilder-Alt, HTTPS und mehr."
+          tooltip={t("scoreCards.seoTooltip")}
           tab="seo"
           subTab="checks"
           count={result.seoChecks.filter((c) => !c.ok).length}
           onNavigate={navigateTo}
         />
         <ScoreCard
-          label="Security"
+          label={t("scoreCards.security")}
           value={result.score.security}
           icon={<Shield className="h-4 w-4" />}
-          tooltip="Prüft moderne Sicherheits-Header (HSTS, CSP, X-Frame-Options, Referrer-Policy …)."
+          tooltip={t("scoreCards.securityTooltip")}
           tab="security"
           count={result.securityHeaders.filter((c) => !c.ok).length}
           onNavigate={navigateTo}
         />
         <ScoreCard
-          label="Performance"
+          label={t("scoreCards.performance")}
           value={result.score.performance}
           icon={<Zap className="h-4 w-4" />}
-          tooltip="Grober Performance-Score aus TTFB, Payload-Größe, Anzahl Assets, Kompression und Caching."
+          tooltip={t("scoreCards.performanceTooltip")}
           tab="perf"
           subTab="signals"
           count={result.perfChecks.filter((c) => !c.ok).length}
           onNavigate={navigateTo}
         />
         <ScoreCard
-          label="Compliance"
+          label={t("scoreCards.compliance")}
           value={result.score.compliance}
           icon={<Scale className="h-4 w-4" />}
-          tooltip="Prüft DSGVO/TDDDG-Signale (Cookie-Consent, Impressum, Datenschutz, externe Fonts)."
+          tooltip={t("scoreCards.complianceTooltip")}
           tab="compliance"
           count={result.complianceChecks.filter((c) => !c.ok).length}
           onNavigate={navigateTo}
         />
         <ScoreCard
-          label="Accessibility"
+          label={t("scoreCards.accessibility")}
           value={result.score.accessibility}
           icon={<Heart className="h-4 w-4" />}
-          tooltip="BITV 2.0 / WCAG Heuristiken: Sprache, Skip-Link, Formular-Labels, Alt-Texte, Fokus-Styles, reduced-motion."
+          tooltip={t("scoreCards.accessibilityTooltip")}
           tab="compliance"
           count={result.accessibilityChecks.filter((c) => !c.ok).length}
           onNavigate={navigateTo}
         />
         <ScoreCard
-          label="Mobile"
+          label={t("scoreCards.mobile")}
           value={result.score.mobile}
           icon={<Smartphone className="h-4 w-4" />}
-          tooltip="Prüft Viewport, Responsive-CSS, Zoom-Erlaubnis, Touch-Target-Größen und bekannte responsive Frameworks."
+          tooltip={t("scoreCards.mobileTooltip")}
           tab="perf"
           subTab="mobile"
           count={result.mobileChecks.filter((c) => !c.ok).length}
           onNavigate={navigateTo}
         />
         <ScoreCard
-          label="Business"
+          label={t("scoreCards.business")}
           value={result.score.business}
           icon={<Store className="h-4 w-4" />}
-          tooltip="Prüft typische Business-/UX-Fehler: klickbare Kontakte, Layout-Überlappungen, lesbare Schrift, Pop-ups, Menü, Cookie-Banner und Formulare."
+          tooltip={t("scoreCards.businessTooltip")}
           tab="business"
           count={result.businessChecks.filter((c) => !c.ok).length}
           onNavigate={navigateTo}
         />
         <ScoreCard
-          label="WordPress"
+          label={t("scoreCards.wordpress")}
           value={result.score.wordpress}
           icon={<Puzzle className="h-4 w-4" />}
-          tooltip="WordPress-spezifische Security- und Performance-Checks. Deaktiviert, wenn keine WordPress-Installation erkannt wurde."
+          tooltip={t("scoreCards.wordpressTooltip")}
           tab="wordpress"
           count={result.wpChecks.filter((c) => !c.ok).length}
           onNavigate={navigateTo}
@@ -715,44 +786,44 @@ function Results({
       <Tabs value={mainTab} onValueChange={(v) => setMainTab(v)} className="space-y-4">
         <TabsList className="bg-card/50 backdrop-blur border border-border/60 h-auto flex flex-wrap gap-1 p-1.5 justify-center">
           <TabsTrigger value="overview" title="Meta, Struktur und Signale auf einen Blick">
-            Übersicht
+            {t("tabs.overview")}
           </TabsTrigger>
           <TabsTrigger
             value="tech"
             title="Technologien, Architektur und Verbindungen"
           >
-            Tech ({result.tech.length})
+            {t("tabs.tech")} ({result.tech.length})
           </TabsTrigger>
           <TabsTrigger value="seo" title="SEO-Checks und Keyword-Ranking">
-            SEO
+            {t("tabs.seo")}
           </TabsTrigger>
           <TabsTrigger value="security" title="Security-Header und Cookie-Flags">
-            Security
+            {t("tabs.security")}
           </TabsTrigger>
           <TabsTrigger value="perf" title="Performance, Mobile und responsive Vorschau">
-            Performance
+            {t("tabs.performance")}
           </TabsTrigger>
           <TabsTrigger value="compliance" title="DSGVO/TDDDG und BITV 2.0 / Barrierefreiheit">
-            Recht & BITV
+            {t("tabs.compliance")}
           </TabsTrigger>
           <TabsTrigger value="compare" title="Zwei Seiten vergleichen">
-            Vergleich
+            {t("tabs.compare")}
           </TabsTrigger>
           <TabsTrigger value="business" title="Business-/UX-Checks">
-            Business
+            {t("tabs.business")}
           </TabsTrigger>
           <TabsTrigger value="crawl" title="robots.txt, Sitemap und Header">
-            Crawl & Raw
+            {t("tabs.crawl")}
           </TabsTrigger>
           {result.wpChecks.length > 0 && (
             <TabsTrigger value="wordpress" title="WordPress-spezifische Checks">
-              WordPress
+              {t("tabs.wordpress")}
             </TabsTrigger>
           )}
         </TabsList>
 
         <TabsContent value="overview" className="grid gap-4 lg:grid-cols-2">
-          <Panel title="Meta & Open Graph" icon={<FileText className="h-4 w-4" />}>
+          <Panel title={t("panels.meta")} icon={<FileText className="h-4 w-4" />}>
             <dl className="text-sm divide-y divide-border/50">
               <MetaRow k="Title" v={result.meta.title} />
               <MetaRow k="Description" v={result.meta.description} />
@@ -768,7 +839,7 @@ function Results({
           </Panel>
 
           <div className="space-y-4">
-            <Panel title="Struktur" icon={<Layers className="h-4 w-4" />}>
+            <Panel title={t("panels.structure")} icon={<Layers className="h-4 w-4" />}>
               <div className="grid grid-cols-3 gap-3 text-center">
                 <Stat label="H1" value={result.headings.h1} />
                 <Stat label="H2" value={result.headings.h2} />
@@ -791,7 +862,7 @@ function Results({
               )}
             </Panel>
 
-            <Panel title="Social Presence" icon={<Link2 className="h-4 w-4" />}>
+            <Panel title={t("panels.socialPresence")} icon={<Link2 className="h-4 w-4" />}>
               {result.socials.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {result.socials.map((s) => (
@@ -809,15 +880,15 @@ function Results({
                 </div>
               ) : (
                 <div className="text-sm text-muted-foreground">
-                  Keine Social-Media-Links im Quellcode gefunden.
+                  {t("panels.noSocial")}
                 </div>
               )}
             </Panel>
 
-            <Panel title={`Letzte Analysen (${history.length})`} icon={<History className="h-4 w-4" />}>
+            <Panel title={`${t("history.title")} (${history.length})`} icon={<History className="h-4 w-4" />}>
               {history.length === 0 ? (
                 <div className="text-sm text-muted-foreground">
-                  Noch keine Analysen im Browser gespeichert.
+                  {t("history.empty")}
                 </div>
               ) : (
                 <ul className="space-y-2 max-h-80 overflow-auto">
@@ -840,7 +911,7 @@ function Results({
                         type="button"
                         onClick={() => onDeleteHistory(entry.id)}
                         className="text-muted-foreground hover:text-rose-400 text-xs px-2"
-                        title="Löschen"
+                        title={t("history.delete")}
                       >
                         ×
                       </button>
@@ -851,7 +922,7 @@ function Results({
             </Panel>
 
             {result.warnings.length > 0 && (
-              <Panel title="Warnungen" icon={<AlertTriangle className="h-4 w-4 text-amber-400" />}>
+              <Panel title={t("panels.warnings")} icon={<AlertTriangle className="h-4 w-4 text-amber-400" />}>
                 <ul className="space-y-1.5 text-sm">
                   {result.warnings.map((w, i) => (
                     <li key={i} className="flex gap-2">
@@ -1427,6 +1498,7 @@ function Results({
 }
 
 function CompareSection({ analyze }: { analyze: (url: string) => Promise<AnalyzeResult> }) {
+  const { t } = useI18n();
   const [urlA, setUrlA] = useState("");
   const [urlB, setUrlB] = useState("");
   const [resultA, setResultA] = useState<AnalyzeResult | null>(null);
@@ -1446,7 +1518,7 @@ function CompareSection({ analyze }: { analyze: (url: string) => Promise<Analyze
       setResultA(a);
       setResultB(b);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Vergleich fehlgeschlagen");
+      setError(err instanceof Error ? err.message : t("comparison.error"));
     } finally {
       setLoading(false);
     }
@@ -1454,23 +1526,23 @@ function CompareSection({ analyze }: { analyze: (url: string) => Promise<Analyze
 
   return (
     <div className="space-y-4">
-      <Panel title="Seiten vergleichen" icon={<GitCompare className="h-4 w-4" />}>
+      <Panel title={t("comparison.title")} icon={<GitCompare className="h-4 w-4" />}>
         <form onSubmit={runCompare} className="grid gap-3 md:grid-cols-2">
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Seite A</label>
+            <label className="text-xs text-muted-foreground">{t("comparison.siteA")}</label>
             <Input
               type="url"
-              placeholder="https://beispiel-a.de"
+              placeholder={t("comparison.placeholderA")}
               value={urlA}
               onChange={(e) => setUrlA(e.target.value)}
               required
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">Seite B</label>
+            <label className="text-xs text-muted-foreground">{t("comparison.siteB")}</label>
             <Input
               type="url"
-              placeholder="https://beispiel-b.de"
+              placeholder={t("comparison.placeholderB")}
               value={urlB}
               onChange={(e) => setUrlB(e.target.value)}
               required
@@ -1479,7 +1551,7 @@ function CompareSection({ analyze }: { analyze: (url: string) => Promise<Analyze
           <div className="md:col-span-2 flex justify-end">
             <Button type="submit" disabled={loading || !urlA.trim() || !urlB.trim()}>
               {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <GitCompare className="h-4 w-4 mr-2" />}
-              Vergleichen
+              {t("comparison.compare")}
             </Button>
           </div>
         </form>
@@ -1492,37 +1564,38 @@ function CompareSection({ analyze }: { analyze: (url: string) => Promise<Analyze
 }
 
 function ComparisonTable({ a, b }: { a: AnalyzeResult; b: AnalyzeResult }) {
+  const { t } = useI18n();
   const rows = [
     { label: "URL", a: a.finalUrl, b: b.finalUrl },
-    { label: "Titel", a: a.meta.title ?? "-", b: b.meta.title ?? "-" },
+    { label: t("comparison.titleLabel"), a: a.meta.title ?? "-", b: b.meta.title ?? "-" },
     { label: "Meta Description", a: a.meta.description ?? "-", b: b.meta.description ?? "-" },
-    { label: "Gesamt-Score", a: String(a.score.overall), b: String(b.score.overall), numeric: true },
-    { label: "SEO", a: String(a.score.seo), b: String(b.score.seo), numeric: true },
-    { label: "Security", a: String(a.score.security), b: String(b.score.security), numeric: true },
-    { label: "Performance", a: String(a.score.performance), b: String(b.score.performance), numeric: true },
-    { label: "Compliance", a: String(a.score.compliance), b: String(b.score.compliance), numeric: true },
-    { label: "Accessibility", a: String(a.score.accessibility), b: String(b.score.accessibility), numeric: true },
-    { label: "Mobile", a: String(a.score.mobile), b: String(b.score.mobile), numeric: true },
-    { label: "Business", a: String(a.score.business), b: String(b.score.business), numeric: true },
-    { label: "Technologien", a: String(a.tech.length), b: String(b.tech.length), numeric: true },
+    { label: t("comparison.overallScore"), a: String(a.score.overall), b: String(b.score.overall), numeric: true },
+    { label: t("scoreCards.seo"), a: String(a.score.seo), b: String(b.score.seo), numeric: true },
+    { label: t("scoreCards.security"), a: String(a.score.security), b: String(b.score.security), numeric: true },
+    { label: t("scoreCards.performance"), a: String(a.score.performance), b: String(b.score.performance), numeric: true },
+    { label: t("scoreCards.compliance"), a: String(a.score.compliance), b: String(b.score.compliance), numeric: true },
+    { label: t("scoreCards.accessibility"), a: String(a.score.accessibility), b: String(b.score.accessibility), numeric: true },
+    { label: t("scoreCards.mobile"), a: String(a.score.mobile), b: String(b.score.mobile), numeric: true },
+    { label: t("scoreCards.business"), a: String(a.score.business), b: String(b.score.business), numeric: true },
+    { label: t("comparison.technologies"), a: String(a.tech.length), b: String(b.tech.length), numeric: true },
     { label: "H1", a: String(a.headings.h1), b: String(b.headings.h1), numeric: true },
-    { label: "Interne Links", a: String(a.links.internal), b: String(b.links.internal), numeric: true },
-    { label: "Externe Links", a: String(a.links.external), b: String(b.links.external), numeric: true },
-    { label: "Bilder", a: String(a.images.length), b: String(b.images.length), numeric: true },
+    { label: t("comparison.internalLinks"), a: String(a.links.internal), b: String(b.links.internal), numeric: true },
+    { label: t("comparison.externalLinks"), a: String(a.links.external), b: String(b.links.external), numeric: true },
+    { label: t("comparison.images"), a: String(a.images.length), b: String(b.images.length), numeric: true },
     { label: "Schema.org", a: String(a.schemas.length), b: String(b.schemas.length), numeric: true },
     { label: "TTFB (ms)", a: a.timings.ttfb ? String(Math.round(a.timings.ttfb)) : "-", b: b.timings.ttfb ? String(Math.round(b.timings.ttfb)) : "-", numeric: true, lowerIsBetter: true },
-    { label: "Download (KB)", a: String(a.timings.downloadKb), b: String(b.timings.downloadKb), numeric: true, lowerIsBetter: true },
+    { label: t("comparison.download"), a: String(a.timings.downloadKb), b: String(b.timings.downloadKb), numeric: true, lowerIsBetter: true },
   ];
 
   const cellClass = "px-3 py-2 text-sm border-b border-border/30";
 
   return (
-    <Panel title="Vergleichsergebnis" icon={<GitCompare className="h-4 w-4" />}>
+    <Panel title={t("comparison.result")} icon={<GitCompare className="h-4 w-4" />}>
       <div className="overflow-auto">
         <table className="w-full text-left">
           <thead>
             <tr className="text-xs text-muted-foreground border-b border-border/60">
-              <th className="px-3 py-2 font-medium">Kriterium</th>
+              <th className="px-3 py-2 font-medium">{t("comparison.criterion")}</th>
               <th className="px-3 py-2 font-medium">{a.finalUrl}</th>
               <th className="px-3 py-2 font-medium">{b.finalUrl}</th>
             </tr>
@@ -1892,10 +1965,11 @@ function CheckFilter({
   onChange: (v: CheckFilterValue) => void;
   counts: { all: number; issues: number; ok: number };
 }) {
+  const { t } = useI18n();
   const options: { key: CheckFilterValue; label: string }[] = [
-    { key: "all", label: `Alle (${counts.all})` },
-    { key: "issues", label: `Probleme (${counts.issues})` },
-    { key: "ok", label: `OK (${counts.ok})` },
+    { key: "all", label: `${t("filters.all")} (${counts.all})` },
+    { key: "issues", label: `${t("filters.issues")} (${counts.issues})` },
+    { key: "ok", label: `${t("filters.ok")} (${counts.ok})` },
   ];
   return (
     <div className="flex flex-wrap gap-1.5 mb-3">
