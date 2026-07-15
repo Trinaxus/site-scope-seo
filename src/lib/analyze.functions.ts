@@ -3047,6 +3047,18 @@ export const analyzeSite = createServerFn({ method: "POST" })
           learnMore: "https://developer.wordpress.org/reference/functions/xmlrpc_enabled/",
         },
         {
+          key: "wp-rest-api",
+          label: "WordPress REST API Status",
+          ok: true,
+          value: restApiStatus,
+          advice:
+            "Die REST API ist in WordPress standardmäßig aktiv. Headless-Sites brauchen sie; bei klassischen Sites solltest du nur den Users-Endpunkt einschränken.",
+          howToFix:
+            "Aktivieren/deaktivieren: Filter add_filter('rest_authentication_errors', ...) in functions.php oder Plugin. Ganze API ausschalten: define('REST_API_ENABLED', false) in wp-config.php (nicht empfohlen bei Headless/Gutenberg).",
+          location: "functions.php, wp-config.php oder Security-Plugin.",
+          learnMore: "https://developer.wordpress.org/rest-api/",
+        },
+        {
           key: "wp-rest-users",
           label: "REST API User Enumeration blockiert",
           ok: !restUsersReachable,

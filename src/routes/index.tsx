@@ -53,6 +53,12 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ConnectionsGraph, CATEGORY_META } from "@/components/ConnectionsGraph";
 import { ReportPDFDownload } from "@/components/ReportPDF";
 import { ReportCompare } from "@/components/ReportCompare";
@@ -640,18 +646,32 @@ function Results({ result }: { result: AnalyzeResult }) {
           <Chip icon={<FileText className="h-3 w-3" />}>{result.timings.downloadKb}KB HTML</Chip>
           <Chip icon={<Code2 className="h-3 w-3" />}>{result.links.scripts} Scripts</Chip>
           {result.wpRestApiStatus && (
-            <Chip
-              icon={<Globe className="h-3 w-3" />}
-              variant={
-                result.wpRestApiStatus.includes("blockiert")
-                  ? "success"
-                  : result.wpRestApiStatus.includes("Benutzer auflistbar")
-                    ? "danger"
-                    : "warning"
-              }
-            >
-              REST API: {result.wpRestApiStatus}
-            </Chip>
+            <TooltipProvider delayDuration={100}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <Chip
+                      icon={<Globe className="h-3 w-3" />}
+                      variant={
+                        result.wpRestApiStatus.includes("blockiert")
+                          ? "success"
+                          : result.wpRestApiStatus.includes("Benutzer auflistbar")
+                            ? "danger"
+                            : "default"
+                      }
+                    >
+                      REST API: {result.wpRestApiStatus}
+                    </Chip>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="max-w-xs">
+                  <p>
+                    Die REST API ist bei Headless-WordPress oder Gutenberg meist beabsichtigt aktiv.
+                    Nur „Benutzer auflistbar" ist kritisch, weil Angreifer damit Benutzernamen sammeln können.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       </div>
