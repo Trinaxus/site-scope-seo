@@ -2919,7 +2919,7 @@ export const analyzeSite = createServerFn({ method: "POST" })
       const xmlRpcReachable = xmlRpcRes.status === 405 || xmlRpcRes.status === 200;
       const restApiActive = restRootRes.status === 200;
       const restUsersReachable = restUsersRes.status === 200;
-      const restApiStatus = restApiActive
+      restApiStatus = restApiActive
         ? restUsersReachable
           ? "aktiv (Benutzer auflistbar)"
           : "aktiv (Benutzer blockiert)"
