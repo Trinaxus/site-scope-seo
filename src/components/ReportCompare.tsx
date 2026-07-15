@@ -10,6 +10,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useI18n } from "@/lib/i18n";
 
 function scoreColor(value: number): string {
   if (value >= 80) return "text-emerald-400";
@@ -24,6 +25,7 @@ function deltaClass(delta: number): string {
 }
 
 export function ReportCompare({ current }: { current: AnalyzeResult }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState<SavedReport[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -85,22 +87,22 @@ export function ReportCompare({ current }: { current: AnalyzeResult }) {
           className="inline-flex items-center gap-1.5"
         >
           <GitCompare className="h-3.5 w-3.5" />
-          Vergleichen
+          {t("results.compareReport")}
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Berichtsvergleich</DialogTitle>
+          <DialogTitle>{t("reportCompare.title")}</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="text-sm text-muted-foreground">
-            Wähle einen früheren Export aus, um Fortschritte oder Rückschritte zu sehen.
+            {t("reportCompare.hint")}
           </div>
 
           {saved.length === 0 ? (
             <div className="rounded-lg border border-border/50 p-6 text-center text-sm text-muted-foreground">
-              Noch keine gespeicherten Berichte. Exportiere zuerst ein PDF.
+              {t("reportCompare.empty")}
             </div>
           ) : (
             <>
@@ -110,7 +112,7 @@ export function ReportCompare({ current }: { current: AnalyzeResult }) {
                   onChange={(e) => setSelectedId(e.target.value || null)}
                   className="flex-1 rounded-md border border-border/60 bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">Früheren Bericht wählen</option>
+                  <option value="">{t("reportCompare.select")}</option>
                   {saved.map((r) => (
                     <option key={r.id} value={r.id}>
                       {new Date(r.createdAt).toLocaleString("de-DE")} — {r.finalUrl}
@@ -137,9 +139,9 @@ export function ReportCompare({ current }: { current: AnalyzeResult }) {
               {baseline && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-3 gap-2 text-sm">
-                    <div className="font-medium text-muted-foreground">Kategorie</div>
-                    <div className="font-medium text-muted-foreground">Vorher</div>
-                    <div className="font-medium text-muted-foreground">Jetzt</div>
+                    <div className="font-medium text-muted-foreground">{t("reportCompare.category")}</div>
+                    <div className="font-medium text-muted-foreground">{t("reportCompare.before")}</div>
+                    <div className="font-medium text-muted-foreground">{t("reportCompare.now")}</div>
                     {scoreKeys.map((key) => {
                       const before = baseline.score[key];
                       const after = current.score[key];
@@ -168,7 +170,7 @@ export function ReportCompare({ current }: { current: AnalyzeResult }) {
                   {fixed.length > 0 && (
                     <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-4">
                       <div className="text-sm font-semibold text-emerald-400 mb-2">
-                        Behoben ({fixed.length})
+                        {t("reportCompare.fixed")} ({fixed.length})
                       </div>
                       <ul className="space-y-1 text-sm">
                         {fixed.map((c) => (
@@ -183,7 +185,7 @@ export function ReportCompare({ current }: { current: AnalyzeResult }) {
                   {newProblems.length > 0 && (
                     <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-4">
                       <div className="text-sm font-semibold text-rose-400 mb-2">
-                        Neu hinzugekommen ({newProblems.length})
+                        {t("reportCompare.newProblems")} ({newProblems.length})
                       </div>
                       <ul className="space-y-1 text-sm">
                         {newProblems.map((c) => (
@@ -197,7 +199,7 @@ export function ReportCompare({ current }: { current: AnalyzeResult }) {
 
                   {fixed.length === 0 && newProblems.length === 0 && (
                     <div className="rounded-lg border border-border/50 p-4 text-center text-sm text-muted-foreground">
-                      Keine Änderungen an den Problemstellen festgestellt.
+                      {t("reportCompare.noChanges")}
                     </div>
                   )}
                 </div>

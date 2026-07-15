@@ -2,6 +2,7 @@ import { Document, Page, Text, View, StyleSheet, usePDF } from "@react-pdf/rende
 import { FileDown } from "lucide-react";
 import type { AnalyzeResult, SeoCheck } from "@/lib/analyze.functions";
 import { saveReport } from "@/lib/reportStorage";
+import { useI18n } from "@/lib/i18n";
 
 const styles = StyleSheet.create({
   page: {
@@ -229,6 +230,7 @@ export function ReportDocument({ result }: { result: AnalyzeResult }) {
 }
 
 export function ReportPDFDownload({ result }: { result: AnalyzeResult }) {
+  const { t } = useI18n();
   const date = new Date().toISOString().slice(0, 10);
   const hostname = result.finalUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
   const [{ url, loading }, update] = usePDF({ document: <ReportDocument result={result} /> });
@@ -256,7 +258,7 @@ export function ReportPDFDownload({ result }: { result: AnalyzeResult }) {
       className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-card/50 px-3 py-1.5 text-xs text-foreground hover:bg-accent transition disabled:opacity-50"
     >
       <FileDown className="h-3.5 w-3.5" />
-      {loading ? "Generiere PDF..." : "PDF-Bericht herunterladen"}
+      {loading ? t("results.generatingPdf") : t("results.reportDownload")}
     </button>
   );
 }

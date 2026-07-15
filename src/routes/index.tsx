@@ -76,17 +76,17 @@ import { KeywordRankChecker } from "@/components/KeywordRankChecker";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "SiteScope - Röntgenblick für jede Website" },
+      { title: "SiteScope - X-ray view for every website" },
       {
         name: "description",
         content:
-          "Analysiere jede Website: SEO, Sicherheit, Performance, Tech-Stack, Verbindungen und mehr - in einem Report.",
+          "Analyze any website: SEO, security, performance, tech stack, connections and more - in one report.",
       },
-      { property: "og:title", content: "SiteScope - Röntgenblick für jede Website" },
+      { property: "og:title", content: "SiteScope - X-ray view for every website" },
       {
         property: "og:description",
         content:
-          "Analysiere jede Website: SEO, Sicherheit, Performance, Tech-Stack, Verbindungen und mehr - in einem Report.",
+          "Analyze any website: SEO, security, performance, tech stack, connections and more - in one report.",
       },
     ],
     links: [{ rel: "canonical", href: "/" }],
@@ -376,15 +376,15 @@ function CollapsibleFooter() {
             type="button"
             onClick={() => setOpen((o) => !o)}
             className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background/60 px-3 py-1 text-xs font-medium hover:bg-card transition-colors shrink-0"
-            aria-label={open ? "Footer einklappen" : "Footer ausklappen"}
+            aria-label={open ? "Collapse footer" : "Expand footer"}
           >
             {open ? (
               <>
-                Weniger <ChevronUp className="h-3.5 w-3.5" />
+                Less <ChevronUp className="h-3.5 w-3.5" />
               </>
             ) : (
               <>
-                Mehr <ChevronDown className="h-3.5 w-3.5" />
+                More <ChevronDown className="h-3.5 w-3.5" />
               </>
             )}
           </button>
@@ -396,9 +396,8 @@ function CollapsibleFooter() {
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
               <div className="space-y-3 max-w-xl">
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  SiteScope analysiert Websites in Sekunden. Von SEO und Performance über Security
-                  und Compliance bis hin zu Mobile, Business-Checks und WordPress - alles in einem
-                  übersichtlichen Dashboard.
+                  SiteScope analyzes websites in seconds. From SEO and performance to security and
+                  compliance, plus mobile, business checks and WordPress - all in one clear dashboard.
                 </p>
                 <div className="flex flex-wrap gap-2">
                   {[
@@ -421,13 +420,13 @@ function CollapsibleFooter() {
               </div>
 
               <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
-                <Heart className="h-4 w-4 text-rose-400" /> Für bessere Websites.
+                <Heart className="h-4 w-4 text-rose-400" /> For better websites.
               </span>
             </div>
 
             <div className="mt-6 pt-4 border-t border-border/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs text-muted-foreground">
               <span>
-                © {new Date().getFullYear()} SiteScope. Gebaut mit{" "}
+                © {new Date().getFullYear()} SiteScope. Built with{" "}
                 <span className="text-foreground">React + TypeScript + Tailwind CSS</span>.
               </span>
             </div>
@@ -580,7 +579,7 @@ function Results({
     <section className="mt-12 space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-xl font-bold">Analyseergebnis</h2>
+          <h2 className="text-xl font-bold">{t("results.title")}</h2>
           <p className="text-sm text-muted-foreground">{result.finalUrl}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -739,10 +738,7 @@ function Results({
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="bottom" className="max-w-xs">
-                  <p>
-                    Die REST API ist bei Headless-WordPress oder Gutenberg meist beabsichtigt aktiv.
-                    Nur „Benutzer auflistbar" ist kritisch, weil Angreifer damit Benutzernamen sammeln können.
-                  </p>
+                  <p>{t("security.restApiTooltip")}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -761,12 +757,12 @@ function Results({
                         : "default"
                     }
                   >
-                    Cookies:{" "}
+                    {t("cookieBanner.label")}: {" "}
                     {result.cookieBanner.needsBanner
                       ? result.cookieBanner.detected
-                        ? "Banner aktiv"
-                        : "Banner fehlt"
-                      : "keiner nötig"}
+                        ? t("cookieBanner.detected")
+                        : t("cookieBanner.missing")
+                      : t("cookieBanner.notNeeded")}
                   </Chip>
                 </span>
               </TooltipTrigger>
@@ -774,7 +770,7 @@ function Results({
                 <p>{result.cookieBanner.recommendation}</p>
                 {result.cookieBanner.trackingServices.length > 0 && (
                   <p className="mt-1 text-[10px] opacity-80">
-                    Dienste: {result.cookieBanner.trackingServices.join(", ")}
+                    {t("cookieBanner.servicesLabel")}: {result.cookieBanner.trackingServices.join(", ")}
                   </p>
                 )}
               </TooltipContent>
@@ -939,9 +935,9 @@ function Results({
         <TabsContent value="tech">
           <Tabs value={techSubTab} onValueChange={(v) => setTechSubTab(v)} className="space-y-4">
             <TabsList className="bg-card/50 backdrop-blur border border-border/60 h-auto flex flex-wrap gap-1 p-1.5">
-              <TabsTrigger value="stack">Tech-Stack</TabsTrigger>
-              <TabsTrigger value="graph">Verbindungen</TabsTrigger>
-              <TabsTrigger value="architecture">Architektur</TabsTrigger>
+              <TabsTrigger value="stack">{t("tech.stackTitle")}</TabsTrigger>
+              <TabsTrigger value="graph">{t("tech.graphTitle")}</TabsTrigger>
+              <TabsTrigger value="architecture">{t("tech.architectureTitle")}</TabsTrigger>
               <TabsTrigger value="pwa">PWA</TabsTrigger>
             </TabsList>
             <TabsContent value="stack">
@@ -950,7 +946,7 @@ function Results({
             <TabsContent value="graph">
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  So hängt der Stack zusammen. Ziehen, zoomen, entdecken.
+                  {t("tech.graphDescription")}
                 </p>
                 <ConnectionsGraph result={result} />
               </div>
@@ -959,42 +955,42 @@ function Results({
               <ArchitecturePanel result={result} />
             </TabsContent>
             <TabsContent value="pwa">
-              <Panel title="Progressive Web App (PWA)" icon={<Wrench className="h-4 w-4" />}>
+              <Panel title={t("tech.pwaTitle")} icon={<Wrench className="h-4 w-4" />}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
                   <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
                     <div className={`text-lg font-bold ${result.pwa.serviceWorkerFound ? "text-emerald-400" : "text-muted-foreground"}`}>
-                      {result.pwa.serviceWorkerFound ? "ja" : "nein"}
+                      {result.pwa.serviceWorkerFound ? t("tech.pwaYes") : t("tech.pwaNo")}
                     </div>
-                    <div className="text-xs text-muted-foreground">Service Worker</div>
+                    <div className="text-xs text-muted-foreground">{t("tech.pwaServiceWorker")}</div>
                   </div>
                   <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
                     <div className={`text-lg font-bold ${result.pwa.manifestFound ? "text-emerald-400" : "text-muted-foreground"}`}>
-                      {result.pwa.manifestFound ? "ja" : "nein"}
+                      {result.pwa.manifestFound ? t("tech.pwaYes") : t("tech.pwaNo")}
                     </div>
-                    <div className="text-xs text-muted-foreground">Manifest erreichbar</div>
+                    <div className="text-xs text-muted-foreground">{t("tech.pwaManifest")}</div>
                   </div>
                   <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
                     <div className="text-lg font-bold text-muted-foreground">
                       {result.pwa.display ?? "-"}
                     </div>
-                    <div className="text-xs text-muted-foreground">Display-Modus</div>
+                    <div className="text-xs text-muted-foreground">{t("tech.pwaDisplayMode")}</div>
                   </div>
                   <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
                     <div className="text-lg font-bold text-muted-foreground">
                       {result.pwa.startUrl ?? "-"}
                     </div>
-                    <div className="text-xs text-muted-foreground">Start URL</div>
+                    <div className="text-xs text-muted-foreground">{t("tech.pwaStartUrl")}</div>
                   </div>
                 </div>
                 {result.pwa.serviceWorkerSrc && (
                   <div className="text-sm mb-3">
-                    <span className="text-muted-foreground">Service Worker:</span>{" "}
+                    <span className="text-muted-foreground">{t("tech.pwaServiceWorker")}:</span>{" "}
                     <code className="text-xs font-mono bg-muted px-1 rounded">{result.pwa.serviceWorkerSrc}</code>
                   </div>
                 )}
                 {result.pwa.manifestUrl && (
                   <div className="text-sm mb-3">
-                    <span className="text-muted-foreground">Manifest:</span>{" "}
+                    <span className="text-muted-foreground">{t("tech.pwaManifestUrl")}:</span>{" "}
                     <a
                       href={result.pwa.manifestUrl}
                       target="_blank"
@@ -1007,7 +1003,7 @@ function Results({
                 )}
                 {result.pwa.themeColor && (
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="text-muted-foreground">Theme-Farbe:</span>
+                    <span className="text-muted-foreground">{t("tech.pwaThemeColor")}:</span>
                     <span
                       className="inline-block h-4 w-4 rounded border border-border"
                       style={{ backgroundColor: result.pwa.themeColor }}
@@ -1023,19 +1019,16 @@ function Results({
         <TabsContent value="seo">
           <Tabs value={seoSubTab} onValueChange={(v) => setSeoSubTab(v)} className="space-y-4">
             <TabsList className="bg-card/50 backdrop-blur border border-border/60 h-auto flex flex-wrap gap-1 p-1.5">
-              <TabsTrigger value="checks">SEO-Checks</TabsTrigger>
-              <TabsTrigger value="keywords">Keywords</TabsTrigger>
-              <TabsTrigger value="images">Bilder</TabsTrigger>
-              <TabsTrigger value="structure">Struktur</TabsTrigger>
+              <TabsTrigger value="checks">{t("seo.tabs.checks")}</TabsTrigger>
+              <TabsTrigger value="keywords">{t("seo.tabs.keywords")}</TabsTrigger>
+              <TabsTrigger value="images">{t("seo.tabs.images")}</TabsTrigger>
+              <TabsTrigger value="structure">{t("seo.tabs.structure")}</TabsTrigger>
             </TabsList>
             <TabsContent value="checks">
-              <Panel title="SEO Checks" icon={<Sparkles className="h-4 w-4" />}>
+              <Panel title={t("seo.checksTitle")} icon={<Sparkles className="h-4 w-4" />}>
                 <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
                   <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                  <span>
-                    Tippe einen Check an, der rot ist - du siehst dann, wo du die Einstellung findest
-                    und wie du ihn behebst.
-                  </span>
+                  <span>{t("seo.checksHint")}</span>
                 </div>
                 <FilteredCheckList
                   items={result.seoChecks}
@@ -1045,14 +1038,14 @@ function Results({
               </Panel>
             </TabsContent>
             <TabsContent value="keywords">
-              <Panel title="Keyword-Ranking-Check" icon={<Search className="h-4 w-4" />}>
+              <Panel title={t("seo.keywordTitle")} icon={<Search className="h-4 w-4" />}>
                 <KeywordRankChecker result={result} />
               </Panel>
             </TabsContent>
             <TabsContent value="images">
-              <Panel title={`Bilder (${result.images.length})`} icon={<ImageIcon className="h-4 w-4" />}>
+              <Panel title={`${t("seo.imagesTitle")} (${result.images.length})`} icon={<ImageIcon className="h-4 w-4" />}>
                 {result.images.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">Keine Bilder im HTML gefunden.</div>
+                  <div className="text-sm text-muted-foreground">{t("seo.noImages")}</div>
                 ) : (
                   <ul className="divide-y divide-border/50 max-h-[600px] overflow-auto">
                     {result.images.map((img, i) => (
@@ -1074,14 +1067,14 @@ function Results({
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="text-xs font-mono truncate text-muted-foreground">
-                            {img.src || "kein src"}
+                            {img.src || t("seo.noSrc")}
                           </div>
                           <div className="mt-1 flex flex-wrap gap-1.5">
                             <Badge variant={img.alt !== null ? "default" : "destructive"} className="text-[10px]">
-                              {img.alt !== null ? (img.alt ? `Alt: ${img.alt.slice(0, 30)}` : "Alt: leer") : "kein alt"}
+                              {img.alt !== null ? (img.alt ? `Alt: ${img.alt.slice(0, 30)}` : t("seo.altEmpty")) : t("seo.noAlt")}
                             </Badge>
                             <Badge variant="outline" className="text-[10px]">
-                              {img.format ?? "unbekannt"}
+                              {img.format ?? t("common.unknown")}
                             </Badge>
                             {img.lazy && (
                               <Badge variant="outline" className="text-[10px]">
@@ -1108,9 +1101,9 @@ function Results({
             </TabsContent>
             <TabsContent value="structure">
               <div className="grid gap-4 lg:grid-cols-2">
-                <Panel title="Heading-Hierarchie" icon={<Code className="h-4 w-4" />}>
+                <Panel title={t("seo.headingsTitle")} icon={<Code className="h-4 w-4" />}>
                   {result.headings.structure.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">Keine Headings gefunden.</div>
+                    <div className="text-sm text-muted-foreground">{t("seo.noHeadings")}</div>
                   ) : (
                     <ul className="space-y-1 text-sm">
                       {result.headings.structure.map((h, i) => (
@@ -1127,7 +1120,7 @@ function Results({
                 </Panel>
                 <Panel title={`Schema.org (${result.schemas.length})`} icon={<FileJson className="h-4 w-4" />}>
                   {result.schemas.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">Kein JSON-LD / Schema.org Markup gefunden.</div>
+                    <div className="text-sm text-muted-foreground">{t("seo.noSchema")}</div>
                   ) : (
                     <div className="space-y-3 max-h-[600px] overflow-auto">
                       {result.schemas.map((s, i) => (
@@ -1149,13 +1142,10 @@ function Results({
         </TabsContent>
 
         <TabsContent value="security" className="grid gap-4 lg:grid-cols-2">
-          <Panel title="Security Header" icon={<Shield className="h-4 w-4" />}>
+          <Panel title={t("security.headerTitle")} icon={<Shield className="h-4 w-4" />}>
             <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
               <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>
-                Header werden fast immer auf dem Server oder CDN gesetzt. Klick ein rotes X an, um
-                zu sehen, wo und wie du den Header einstellst.
-              </span>
+              <span>{t("security.headerDescription")}</span>
             </div>
             <FilteredCheckList
               items={result.securityHeaders}
@@ -1163,10 +1153,10 @@ function Results({
               renderItem={(h) => <SecurityItem h={h} />}
             />
           </Panel>
-          <Panel title={`Cookies (${result.cookies.length})`} icon={<Cookie className="h-4 w-4" />}>
+          <Panel title={`${t("security.cookiesTitle")} (${result.cookies.length})`} icon={<Cookie className="h-4 w-4" />}>
             {result.cookies.length === 0 ? (
               <div className="text-sm text-muted-foreground">
-                Keine Cookies bei der Initial-Response.
+                {t("security.noCookies")}
               </div>
             ) : (
               <ul className="space-y-2">
@@ -1188,16 +1178,15 @@ function Results({
               </ul>
             )}
           </Panel>
-          <Panel title={`Mixed Content (${result.mixedContent.length})`} icon={<Globe className="h-4 w-4" />} className="lg:col-span-2">
+          <Panel title={`${t("security.mixedContentTitle")} (${result.mixedContent.length})`} icon={<Globe className="h-4 w-4" />} className="lg:col-span-2">
             {result.mixedContent.length === 0 ? (
               <div className="text-sm text-muted-foreground">
-                Keine HTTP-Ressourcen auf HTTPS-Seite gefunden.
+                {t("security.mixedContentEmpty")}
               </div>
             ) : (
               <>
                 <div className="mb-3 text-xs text-rose-400">
-                  Diese Ressourcen werden über HTTP eingebunden und erzeugen in modernen Browsern
-                  Sicherheitswarnungen.
+                  {t("security.mixedContentWarning")}
                 </div>
                 <ul className="divide-y divide-border/50 max-h-72 overflow-auto">
                   {result.mixedContent.map((m, i) => (
@@ -1217,19 +1206,16 @@ function Results({
         <TabsContent value="perf">
           <Tabs value={perfSubTab} onValueChange={(v) => setPerfSubTab(v)} className="space-y-4">
             <TabsList className="bg-card/50 backdrop-blur border border-border/60 h-auto flex flex-wrap gap-1 p-1.5">
-              <TabsTrigger value="signals">Performance-Signale</TabsTrigger>
-              <TabsTrigger value="vitals">Core Web Vitals</TabsTrigger>
-              <TabsTrigger value="mobile">Mobile</TabsTrigger>
-              <TabsTrigger value="preview">Vorschau</TabsTrigger>
+              <TabsTrigger value="signals">{t("performance.signalsTitle")}</TabsTrigger>
+              <TabsTrigger value="vitals">{t("performance.coreWebVitals")}</TabsTrigger>
+              <TabsTrigger value="mobile">{t("performance.mobileTitle")}</TabsTrigger>
+              <TabsTrigger value="preview">{t("performance.preview")}</TabsTrigger>
             </TabsList>
             <TabsContent value="signals">
-              <Panel title="Performance-Signale" icon={<Zap className="h-4 w-4" />}>
+              <Panel title={t("performance.signalsTitle")} icon={<Zap className="h-4 w-4" />}>
                 <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
                   <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                  <span>
-                    Rot bedeutet: hier lässt sich Geschwindigkeit holen. Jeder Punkt zeigt, wo du
-                    ansetzt und wo die Einstellung sitzt.
-                  </span>
+                  <span>{t("performance.signalsDescription")}</span>
                 </div>
                 <FilteredCheckList
                   items={result.perfChecks}
@@ -1242,21 +1228,17 @@ function Results({
               <PageSpeedPanel result={result} />
             </TabsContent>
             <TabsContent value="mobile">
-              <Panel title="Mobile-Optimierung" icon={<Smartphone className="h-4 w-4" />}>
+              <Panel title={t("performance.mobileTitle")} icon={<Smartphone className="h-4 w-4" />}>
                 <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
                   <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                  <span>
-                    Heuristische Prüfung auf Mobil-Tauglichkeit: Viewport, Responsive-CSS, Zoom,
-                    Touch-Target-Größen und bekannte responsive Frameworks. Kein Ersatz für echte
-                    Geräte-Tests.
-                  </span>
+                  <span>{t("performance.mobileDescription")}</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                   <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
                     <Smartphone className="h-5 w-5 mx-auto mb-1 text-emerald-400" />
                     <div className="text-xs text-muted-foreground">Smartphone</div>
                     <div className="text-sm font-medium">
-                      {result.mobileChecks.find((c) => c.key === "viewport")?.ok ? "bereit" : "prüfen"}
+                      {result.mobileChecks.find((c) => c.key === "viewport")?.ok ? t("performance.ready") : t("performance.check")}
                     </div>
                   </div>
                   <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
@@ -1264,8 +1246,8 @@ function Results({
                     <div className="text-xs text-muted-foreground">Tablet</div>
                     <div className="text-sm font-medium">
                       {result.mobileChecks.find((c) => c.key === "responsive-css")?.ok
-                        ? "bereit"
-                        : "prüfen"}
+                        ? t("performance.ready")
+                        : t("performance.check")}
                     </div>
                   </div>
                   <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
@@ -1288,15 +1270,15 @@ function Results({
         </TabsContent>
 
         <TabsContent value="crawl" className="grid gap-4 lg:grid-cols-2">
-          <Panel title="robots.txt" icon={<Bot className="h-4 w-4" />}>
+          <Panel title={t("raw.robotsTxt")} icon={<Bot className="h-4 w-4" />}>
             {result.robots.found ? (
               <>
                 <div className="flex flex-wrap gap-2 text-xs mb-3">
                   <FlagBadge ok={!result.robots.disallowAll}>
-                    {result.robots.disallowAll ? "Blockt alles" : "Crawling erlaubt"}
+                    {result.robots.disallowAll ? t("raw.blocksAll") : t("raw.crawlingAllowed")}
                   </FlagBadge>
                   <Badge variant="outline" className="text-[10px]">
-                    {result.robots.sitemaps.length} Sitemap-Verweise
+                    {result.robots.sitemaps.length} {t("raw.sitemapRefs")}
                   </Badge>
                 </div>
                 <pre className="text-xs bg-background/50 rounded-lg p-3 overflow-auto max-h-72 border border-border/50">
@@ -1304,14 +1286,14 @@ function Results({
                 </pre>
               </>
             ) : (
-              <div className="text-sm text-muted-foreground">Keine robots.txt gefunden.</div>
+              <div className="text-sm text-muted-foreground">{t("raw.noRobots")}</div>
             )}
           </Panel>
-          <Panel title="sitemap.xml" icon={<MapIcon className="h-4 w-4" />}>
+          <Panel title={t("raw.sitemap")} icon={<MapIcon className="h-4 w-4" />}>
             {result.sitemap.found ? (
               <div className="space-y-2">
                 <div className="text-2xl font-bold">{result.sitemap.urls}</div>
-                <div className="text-sm text-muted-foreground">URLs im Index</div>
+                <div className="text-sm text-muted-foreground">{t("raw.urlsInIndex")}</div>
                 <a
                   href={result.sitemap.url}
                   target="_blank"
@@ -1322,27 +1304,27 @@ function Results({
                 </a>
               </div>
             ) : (
-              <div className="text-sm text-muted-foreground">Keine sitemap.xml entdeckt.</div>
+              <div className="text-sm text-muted-foreground">{t("raw.noSitemap")}</div>
             )}
           </Panel>
-          <Panel title="Links" icon={<Network className="h-4 w-4" />}>
+          <Panel title={t("links.title")} icon={<Network className="h-4 w-4" />}>
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
                 <div className="text-xl font-bold">{result.links.internal}</div>
-                <div className="text-xs text-muted-foreground">intern</div>
+                <div className="text-xs text-muted-foreground">{t("links.internal")}</div>
               </div>
               <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
                 <div className="text-xl font-bold">{result.links.external}</div>
-                <div className="text-xs text-muted-foreground">extern</div>
+                <div className="text-xs text-muted-foreground">{t("links.external")}</div>
               </div>
               <div className="rounded-lg border border-border/50 bg-background/40 p-3 text-center">
                 <div className="text-xl font-bold">{result.links.nofollow}</div>
-                <div className="text-xs text-muted-foreground">nofollow</div>
+                <div className="text-xs text-muted-foreground">{t("links.nofollow")}</div>
               </div>
             </div>
             {result.links.topDomains.length > 0 && (
               <div className="mb-4">
-                <div className="text-xs font-medium mb-2 text-muted-foreground">Top externe Domains</div>
+                <div className="text-xs font-medium mb-2 text-muted-foreground">{t("links.topDomains")}</div>
                 <div className="flex flex-wrap gap-1.5">
                   {result.links.topDomains.map((d, i) => (
                     <Badge key={i} variant="outline" className="text-[10px]">
@@ -1353,7 +1335,7 @@ function Results({
               </div>
             )}
             <div className="text-xs font-medium mb-2 text-muted-foreground">
-              {result.linksDetailed.length} verfolgbare Links
+              {result.linksDetailed.length} {t("links.trackedLinks")}
             </div>
             <ul className="divide-y divide-border/50 max-h-72 overflow-auto">
               {result.linksDetailed.slice(0, 30).map((link, i) => (
@@ -1370,7 +1352,7 @@ function Results({
                   <div className="mt-1 flex flex-wrap gap-1.5">
                     {link.external && (
                       <Badge variant="outline" className="text-[10px]">
-                        extern
+                        {t("links.external")}
                       </Badge>
                     )}
                     {link.nofollow && (
@@ -1406,13 +1388,10 @@ function Results({
         <TabsContent value="compliance">
           <CookieConsentPanel result={result} />
           <div className="grid gap-4 lg:grid-cols-2 mt-4">
-            <Panel title="DSGVO / TDDDG Checks" icon={<Scale className="h-4 w-4" />}>
+            <Panel title={t("compliance.dsgvoTitle")} icon={<Scale className="h-4 w-4" />}>
               <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
                 <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                <span>
-                  Diese Checks ersetzen keine Rechtsberatung, zeigen aber die wichtigsten Hebel für
-                  deutsche Datenschutz-Anforderungen.
-                </span>
+                <span>{t("compliance.dsgvoDescription")}</span>
               </div>
               <FilteredCheckList
                 items={result.complianceChecks}
@@ -1420,13 +1399,10 @@ function Results({
                 renderItem={(c) => <SeoCheckItem c={c} />}
               />
             </Panel>
-            <Panel title="BITV 2.0 / Barrierefreiheit" icon={<Heart className="h-4 w-4" />}>
+            <Panel title={t("compliance.bitvTitle")} icon={<Heart className="h-4 w-4" />}>
               <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
                 <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                <span>
-                  Heuristische Prüfung aus dem HTML. Kein Ersatz für einen vollständigen BITV/WCAG-Test
-                  mit assistiven Technologien.
-                </span>
+                <span>{t("compliance.bitvDescription")}</span>
               </div>
               <FilteredCheckList
                 items={result.accessibilityChecks}
@@ -1438,14 +1414,10 @@ function Results({
         </TabsContent>
 
         <TabsContent value="business">
-          <Panel title="Business- & UX-Checks" icon={<Store className="h-4 w-4" />}>
+          <Panel title={t("business.title")} icon={<Store className="h-4 w-4" />}>
             <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
               <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              <span>
-                Heuristische Prüfung typischer Business-/UX-Fehler aus dem HTML und Inline-CSS:
-                klickbare Kontakte, Layout-Überlappungen, lesbare Schrift, Pop-ups, mobiles Menü,
-                Cookie-Banner und absendbare Formulare. Kein Ersatz für echte UX-Tests.
-              </span>
+              <span>{t("business.description")}</span>
             </div>
             <FilteredCheckList
               items={result.businessChecks}
@@ -1457,13 +1429,10 @@ function Results({
 
         {result.wpChecks.length > 0 && (
           <TabsContent value="wordpress">
-            <Panel title="WordPress-Checks" icon={<Puzzle className="h-4 w-4" />}>
+            <Panel title={t("wordpressChecks.title")} icon={<Puzzle className="h-4 w-4" />}>
               <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
                 <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                <span>
-                  WordPress-spezifische Sicherheits- und Performance-Checks aus dem HTML und
-                  schnellen Endpunkt-Tests. Kein Ersatz für ein vollständiges WordPress-Audit.
-                </span>
+                <span>{t("wordpressChecks.description")}</span>
               </div>
               <FilteredCheckList
                 items={result.wpChecks}
@@ -1660,6 +1629,7 @@ function ScoreCard({
   onNavigate: (tab: string, subTab?: string) => void;
   disabled?: boolean;
 }) {
+  const { t } = useI18n();
   const hasDetails = !disabled && typeof count === "number" && count > 0;
   return (
     <button
@@ -1684,7 +1654,7 @@ function ScoreCard({
           {label}
         </span>
         {!disabled && value === 100 && (
-          <span className="text-emerald-400 normal-case tracking-normal">perfekt ✓</span>
+          <span className="text-emerald-400 normal-case tracking-normal">{t("scoreCard.perfect")} ✓</span>
         )}
       </div>
       <div
@@ -1696,7 +1666,7 @@ function ScoreCard({
       {!disabled && <Progress value={value} className="mt-3 h-1.5" />}
       {hasDetails && (
         <span className="mt-3 inline-flex items-center gap-1 text-[11px] text-primary hover:underline">
-          {`${count} Verbesserung${count === 1 ? "" : "en"} anzeigen →`}
+          {`${count} ${count === 1 ? t("scoreCard.improvementSingular") : t("scoreCard.improvementsPlural")} →`}
         </span>
       )}
     </button>
@@ -1704,6 +1674,7 @@ function ScoreCard({
 }
 
 function PageSpeedPanel({ result }: { result: AnalyzeResult }) {
+  const { t } = useI18n();
   const { pageSpeed } = result;
   const mobile = pageSpeed.mobile;
   const desktop = pageSpeed.desktop;
@@ -1743,9 +1714,9 @@ function PageSpeedPanel({ result }: { result: AnalyzeResult }) {
       fcp: isMobile ? 3000 : 1800,
     }[key];
     if (good === undefined || poor === undefined) return { label: value.toString(), color: "text-foreground" };
-    if (value <= good!) return { label: "gut", color: "text-emerald-400" };
-    if (value <= poor!) return { label: "verbesserungswürdig", color: "text-amber-400" };
-    return { label: "schlecht", color: "text-rose-400" };
+    if (value <= good!) return { label: t("performance.metricGood"), color: "text-emerald-400" };
+    if (value <= poor!) return { label: t("performance.metricNeedsImprovement"), color: "text-amber-400" };
+    return { label: t("performance.metricPoor"), color: "text-rose-400" };
   }
 
   function formatValue(key: string, value: number | null) {
@@ -1769,16 +1740,16 @@ function PageSpeedPanel({ result }: { result: AnalyzeResult }) {
       { label: "SEO", value: data.seoScore },
     ];
     return (
-      <Panel title={device === "mobile" ? "Mobile" : "Desktop"} icon={<Smartphone className="h-4 w-4" />}>
+      <Panel title={device === "mobile" ? t("performance.mobileTitle") : "Desktop"} icon={<Smartphone className="h-4 w-4" />}>
         {pageSpeed.estimated && (
           <div className="mb-3 text-xs text-amber-400">
-            Geschätzte Werte. Für echte Lighthouse-Messungen hinterlege einen{" "}
+            {t("performance.estimatedValues")}{" "}
             <code className="bg-muted px-1 rounded">PAGESPEED_API_KEY</code>.
           </div>
         )}
         {pageSpeed.error && (
           <div className="mb-3 text-xs text-rose-400">
-            PageSpeed Insights Fehler: {pageSpeed.error}
+            PageSpeed Insights {pageSpeed.error}
           </div>
         )}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
@@ -1818,8 +1789,8 @@ function PageSpeedPanel({ result }: { result: AnalyzeResult }) {
       {mobile && <MetricCard device="mobile" data={mobile} />}
       {desktop && <MetricCard device="desktop" data={desktop} />}
       {!mobile && !desktop && (
-        <Panel title="Core Web Vitals" icon={<Zap className="h-4 w-4" />}>
-          <div className="text-sm text-muted-foreground">Keine PageSpeed-Daten verfügbar.</div>
+        <Panel title={t("performance.coreWebVitals")} icon={<Zap className="h-4 w-4" />}>
+          <div className="text-sm text-muted-foreground">{t("performance.noPageSpeedData")}</div>
         </Panel>
       )}
     </div>
@@ -1919,6 +1890,7 @@ function HowToFix({
   learnMore?: string;
   ok?: boolean;
 }) {
+  const { t } = useI18n();
   if (!howToFix && !location) return null;
   const wrapperClass = ok
     ? "border-border/30 bg-background/40"
@@ -1947,7 +1919,7 @@ function HowToFix({
           rel="noreferrer"
           className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline"
         >
-          <BookOpen className="h-3 w-3" /> Mehr dazu
+          <BookOpen className="h-3 w-3" /> {t("howToFix.learnMore")}
         </a>
       )}
     </div>
@@ -2095,6 +2067,7 @@ function SeoCheckItem({ c }: { c: AnalyzeResult["seoChecks"][number] }) {
 }
 
 function SecurityItem({ h }: { h: AnalyzeResult["securityHeaders"][number] }) {
+  const { t } = useI18n();
   return (
     <li key={h.name} className="py-3">
       <div className="flex items-center gap-2">
@@ -2106,7 +2079,7 @@ function SecurityItem({ h }: { h: AnalyzeResult["securityHeaders"][number] }) {
         <span className="text-sm font-mono">{h.name}</span>
       </div>
       <div className="mt-1 text-xs text-muted-foreground break-all pl-6">
-        {h.value ?? <span className="italic">nicht gesetzt</span>}
+        {h.value ?? <span className="italic">{t("common.notFound")}</span>}
       </div>
       {h.advice && <div className="pl-6 mt-1 text-xs text-amber-400/90">{h.advice}</div>}
       {!h.ok && (
@@ -2123,12 +2096,13 @@ function CookieCategoryBadge({
 }: {
   category: AnalyzeResult["cookies"][number]["category"];
 }) {
+  const { t } = useI18n();
   const labels: Record<typeof category, string> = {
-    necessary: "notwendig",
-    analytics: "analyse",
-    marketing: "marketing",
+    necessary: t("cookieCategory.necessary"),
+    analytics: t("cookieCategory.analytics"),
+    marketing: t("cookieCategory.marketing"),
     "third-party": "third-party",
-    unknown: "unbekannt",
+    unknown: t("cookieCategory.unknown"),
   };
   const styles: Record<typeof category, string> = {
     necessary: "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
@@ -2147,6 +2121,7 @@ function CookieCategoryBadge({
 }
 
 function CookieConsentPanel({ result }: { result: AnalyzeResult }) {
+  const { t } = useI18n();
   const consentCheck = result.complianceChecks.find((c) => c.key === "cookie-consent");
   const bannerCheck = result.complianceChecks.find((c) => c.key === "cookie-banner-detected");
   const nonEssentialCheck = result.complianceChecks.find((c) => c.key === "non-essential-cookies");
@@ -2155,10 +2130,10 @@ function CookieConsentPanel({ result }: { result: AnalyzeResult }) {
   );
 
   return (
-    <Panel title="Cookie-Consent Zusammenfassung" icon={<Cookie className="h-4 w-4" />}>
+    <Panel title={t("cookieConsent.title")} icon={<Cookie className="h-4 w-4" />}>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-lg border border-border/50 bg-background/40 p-3">
-          <div className="text-xs text-muted-foreground mb-1">Consent-Tool</div>
+          <div className="text-xs text-muted-foreground mb-1">{t("cookieConsent.consentTool")}</div>
           <div className="text-sm font-medium flex items-center gap-1.5">
             {consentCheck?.ok ? (
               <>
@@ -2168,14 +2143,14 @@ function CookieConsentPanel({ result }: { result: AnalyzeResult }) {
             ) : (
               <>
                 <XCircle className="h-3.5 w-3.5 text-rose-400" />
-                <span className="text-rose-400">{consentCheck?.value ?? "-"}</span>
+                <span className="text-rose-400">{consentCheck?.value ?? t("common.none")}</span>
               </>
             )}
           </div>
         </div>
         <div className="rounded-lg border border-border/50 bg-background/40 p-3">
           <div className="text-xs text-muted-foreground mb-1">
-            Banner erkannt
+            {t("cookieConsent.bannerDetected")}
             {result.cookieBanner.tool && (
               <span className="ml-1 text-[10px] text-muted-foreground/70">
                 ({result.cookieBanner.tool})
@@ -2191,13 +2166,13 @@ function CookieConsentPanel({ result }: { result: AnalyzeResult }) {
             ) : (
               <>
                 <XCircle className="h-3.5 w-3.5 text-rose-400" />
-                <span className="text-rose-400">{bannerCheck?.value ?? "nein"}</span>
+                <span className="text-rose-400">{bannerCheck?.value ?? t("common.no")}</span>
               </>
             )}
           </div>
         </div>
         <div className="rounded-lg border border-border/50 bg-background/40 p-3">
-          <div className="text-xs text-muted-foreground mb-1">Nicht-notwendige Cookies</div>
+          <div className="text-xs text-muted-foreground mb-1">{t("cookieConsent.nonEssentialCookies")}</div>
           <div className="text-sm font-medium flex items-center gap-1.5">
             {nonEssentialCheck?.ok ? (
               <>
@@ -2207,21 +2182,21 @@ function CookieConsentPanel({ result }: { result: AnalyzeResult }) {
             ) : (
               <>
                 <XCircle className="h-3.5 w-3.5 text-rose-400" />
-                <span className="text-rose-400">{nonEssentialCookies.length} erkannt</span>
+                <span className="text-rose-400">{nonEssentialCookies.length} {t("cookieConsent.detected")}</span>
               </>
             )}
           </div>
         </div>
       </div>
       <div className="mt-4 rounded-lg border border-border/50 bg-background/40 p-3">
-        <div className="text-xs text-muted-foreground mb-1">Einschätzung</div>
+        <div className="text-xs text-muted-foreground mb-1">{t("cookieConsent.assessment")}</div>
         <div className="text-sm leading-relaxed">{result.cookieBanner.recommendation}</div>
       </div>
 
       {result.cookieBanner.trackingServices.length > 0 && (
         <div className="mt-4">
           <div className="text-xs text-muted-foreground mb-2">
-            Tracking- & Marketing-Dienste
+            {t("cookieConsent.trackingServices")}
           </div>
           <div className="flex flex-wrap gap-2">
             {result.cookieBanner.trackingServices.map((service) => (
@@ -2804,13 +2779,14 @@ const LANGUAGE_COLORS: Record<string, string> = {
 };
 
 function LanguageBar({ shares }: { shares: Record<string, number> }) {
+  const { t } = useI18n();
   const entries = Object.entries(shares).filter(([, v]) => v > 0);
   if (entries.length === 0) return null;
   return (
     <div className="rounded-2xl border border-border/60 bg-card/50 backdrop-blur p-5 mb-4">
       <div className="flex items-center gap-2 mb-3">
         <Code2 className="h-4 w-4 text-primary" />
-        <h3 className="text-sm font-semibold">Sprachen</h3>
+        <h3 className="text-sm font-semibold">{t("tech.languages")}</h3>
       </div>
       <div className="h-3 w-full rounded-full overflow-hidden flex">
         {entries.map(([name, pct]) => (
@@ -2839,6 +2815,7 @@ function LanguageBar({ shares }: { shares: Record<string, number> }) {
 }
 
 function TechGrid({ result }: { result: AnalyzeResult }) {
+  const { t } = useI18n();
   const grouped = new Map<string, AnalyzeResult["tech"]>();
   for (const t of result.tech) {
     const g: AnalyzeResult["tech"] = grouped.get(t.category) ?? [];
@@ -2847,8 +2824,8 @@ function TechGrid({ result }: { result: AnalyzeResult }) {
   }
   if (result.tech.length === 0 && Object.keys(result.languageShares).length === 0) {
     return (
-      <Panel title="Tech-Stack" icon={<Layers className="h-4 w-4" />}>
-        <div className="text-sm text-muted-foreground">Keine bekannten Technologien erkannt.</div>
+      <Panel title={t("tech.stackTitle")} icon={<Layers className="h-4 w-4" />}>
+        <div className="text-sm text-muted-foreground">{t("tech.noTech")}</div>
       </Panel>
     );
   }
