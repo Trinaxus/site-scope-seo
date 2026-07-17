@@ -118,6 +118,24 @@ export interface AnalyzeResult {
   businessChecks: SeoCheck[];
   wpChecks: SeoCheck[];
   wpRestApiStatus?: string;
+  wpApiCheck?: {
+    restAvailable: boolean;
+    graphQlAvailable: boolean;
+    endpoints: {
+      name: string;
+      url: string;
+      status: number;
+      accessible: boolean;
+      withToken: boolean;
+      items?: number;
+      body?: string;
+      error?: string;
+    }[];
+    plugins: { name: string; detected: boolean; details?: string }[];
+    usersListable: boolean | null;
+    hasJwtAuth: boolean;
+    graphQlSchema?: string;
+  };
   cookieBanner: {
     detected: boolean;
     tool: string | null;
@@ -263,7 +281,9 @@ export interface AnalyzeResult {
   warnings: string[];
 }
 
-const InputSchema = z.object({ url: z.string().min(3) });
+const InputSchema = z.object({
+  url: z.string().min(3),
+});
 
 async function checkHttp2Directly(
   url: string,
@@ -1164,7 +1184,7 @@ async function fetchWithTimeout(
     return await fetch(url, {
       ...opts,
       signal: ctl.signal,
-      redirect: "follow",
+      redirect: (opts.redirect as RequestInit["redirect"]) ?? "follow",
       headers: {
         "user-agent":
           "Mozilla/5.0 (compatible; SiteScopeBot/1.0; +https://sitescope.app) Chrome/120",
@@ -1198,6 +1218,215 @@ function extractApiRoutes(html: string): string[] {
     }
   }
   return [...found].slice(0, 25);
+}
+
+async function checkWordPressApi(
+  baseUrl: string,
+  token?: string,
+): Promise<NonNullable<AnalyzeResult["wpApiCheck"]>> {
+  const base = (() => {
+    const url = new URL(baseUrl);
+    return `${url.origin}${url.pathname.replace(/\/$/, "")}`;
+  })();
+
+  const authHeaders: Record<string, string> = token
+    ? { Authorization: token.startsWith("Bearer ") || token.startsWith("Basic ") ? token : `Bearer ${token}` }
+    : {};
+
+  async function probe(
+    name: string,
+    path: string,
+    withToken: boolean,
+  ): Promise<NonNullable<AnalyzeResult["wpApiCheck"]>["endpoints"][number]> {
+    const url = `${base}${path}`;
+    try {
+      const res = await fetchWithTimeout(
+        url,
+        {
+          method: "GET",
+          redirect: "manual",
+          headers: withToken ? authHeaders : {},
+        },
+        8000,
+      );
+      const text = await res.text().catch(() => "");
+      let items: number | undefined;
+      let body: string | undefined;
+      try {
+        const json = JSON.parse(text);
+        if (Array.isArray(json)) {
+          items = json.length;
+          body = JSON.stringify(json.slice(0, 50), null, 2);
+        } else if (json && typeof json === "object") {
+          if ("length" in json && typeof json.length === "number") items = json.length;
+          body = JSON.stringify(json, null, 2);
+        }
+      } catch {
+        items = undefined;
+        body = undefined;
+      }
+      return {
+        name,
+        url,
+        status: res.status,
+        accessible: res.status === 200,
+        withToken,
+        items,
+        body,
+        error: res.status >= 400 ? text.slice(0, 120) : undefined,
+      };
+    } catch (e) {
+      return {
+        name,
+        url,
+        status: 0,
+        accessible: false,
+        withToken,
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  }
+
+  const restRootUrl = `${base}/wp-json/`;
+  let restAvailable = false;
+  try {
+    const restRootRes = await fetchWithTimeout(restRootUrl, { method: "GET", redirect: "manual" }, 8000);
+    restAvailable = restRootRes.status === 200;
+  } catch {
+    restAvailable = false;
+  }
+
+  const endpoints = [
+    await probe("users", "/wp-json/wp/v2/users", false),
+    await probe("users", "/wp-json/wp/v2/users", true),
+    await probe("posts", "/wp-json/wp/v2/posts", false),
+    await probe("posts", "/wp-json/wp/v2/posts", true),
+    await probe("pages", "/wp-json/wp/v2/pages", false),
+    await probe("pages", "/wp-json/wp/v2/pages", true),
+    await probe("media", "/wp-json/wp/v2/media", false),
+    await probe("media", "/wp-json/wp/v2/media", true),
+    await probe("comments", "/wp-json/wp/v2/comments", false),
+    await probe("comments", "/wp-json/wp/v2/comments", true),
+    await probe("plugins", "/wp-json/wp/v2/plugins", false),
+    await probe("plugins", "/wp-json/wp/v2/plugins", true),
+    await probe("themes", "/wp-json/wp/v2/themes", false),
+    await probe("themes", "/wp-json/wp/v2/themes", true),
+  ];
+
+  const usersAnon = endpoints.find((e) => e.name === "users" && !e.withToken);
+  const usersAuth = endpoints.find((e) => e.name === "users" && e.withToken);
+  const usersListable = usersAnon?.accessible
+    ? true
+    : usersAuth?.accessible
+      ? true
+      : usersAnon && usersAnon.status > 0
+        ? false
+        : null;
+
+  // GraphQL probe
+  const graphQlUrl = `${base}/graphql`;
+  let graphQlAvailable = false;
+  let graphQlSchema: string | undefined;
+  try {
+    const introspectionQuery = JSON.stringify({
+      query:
+        "query IntrospectionQuery { __schema { queryType { name } mutationType { name } subscriptionType { name } types { name } } }",
+    });
+    const gqlRes = await fetchWithTimeout(
+      graphQlUrl,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...authHeaders,
+        },
+        body: introspectionQuery,
+      },
+      8000,
+    );
+    const contentType = gqlRes.headers.get("content-type") || "";
+    const gqlText = await gqlRes.text().catch(() => "");
+    let gqlJson: Record<string, unknown> | undefined;
+    try {
+      gqlJson = JSON.parse(gqlText) as Record<string, unknown>;
+    } catch {
+      gqlJson = undefined;
+    }
+    graphQlAvailable =
+      gqlRes.status === 200 &&
+      contentType.includes("application/json") &&
+      !!gqlJson &&
+      ("data" in gqlJson || "errors" in gqlJson);
+    if (graphQlAvailable) {
+      const types = (gqlJson?.data as Record<string, unknown> | undefined)?.__schema as
+        | { types?: { name?: string }[] }
+        | undefined;
+      if (Array.isArray(types?.types)) {
+        graphQlSchema = types.types
+          .map((t) => t.name)
+          .filter(Boolean)
+          .slice(0, 20)
+          .join(", ");
+      }
+    }
+  } catch {
+    graphQlAvailable = false;
+  }
+
+  // Detect relevant plugins by probing common endpoints / reading headers
+  const hasJwtAuth = endpoints.some((e) => e.name === "users" && e.withToken && e.accessible && !usersAnon?.accessible);
+
+  const plugins: { name: string; detected: boolean; details?: string }[] = [];
+
+  // WPGraphQL detection
+  try {
+    const wpGraphQlRes = await fetchWithTimeout(
+      graphQlUrl,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ query: "{ __typename }" }),
+      },
+      5000,
+    );
+    const wpGraphQlText = await wpGraphQlRes.text().catch(() => "");
+    plugins.push({
+      name: "WPGraphQL",
+      detected: wpGraphQlRes.status === 200 && /"data"/.test(wpGraphQlText),
+      details: wpGraphQlRes.status === 200 ? "Endpoint reachable" : `Status ${wpGraphQlRes.status}`,
+    });
+  } catch {
+    plugins.push({ name: "WPGraphQL", detected: false, details: "Endpoint unreachable" });
+  }
+
+  // JWT Authentication for WP REST API detection (commonly adds /wp-json/jwt-auth/v1)
+  try {
+    const jwtUrl = `${base}/wp-json/jwt-auth/v1/token/validate`;
+    const jwtRes = await fetchWithTimeout(jwtUrl, { method: "POST", headers: authHeaders }, 5000);
+    plugins.push({
+      name: "JWT Auth",
+      detected: jwtRes.status === 200 || jwtRes.status === 403,
+      details: `Status ${jwtRes.status}`,
+    });
+  } catch {
+    plugins.push({ name: "JWT Auth", detected: false, details: "Endpoint unreachable" });
+  }
+
+  plugins.push({
+    name: "Application Passwords",
+    detected: hasJwtAuth,
+    details: token ? "Token allowed access to protected endpoint" : "No token provided",
+  });
+
+  return {
+    restAvailable,
+    graphQlAvailable,
+    endpoints,
+    plugins,
+    usersListable,
+    hasJwtAuth,
+    graphQlSchema,
+  };
 }
 
 async function fetchImpressumHtml(
@@ -3924,4 +4153,51 @@ export const analyzeSite = createServerFn({ method: "POST" })
       errors,
       warnings,
     };
+  });
+
+const WordPressApiInputSchema = z.object({
+  url: z.string().min(3),
+  token: z.string().optional(),
+  username: z.string().optional(),
+  password: z.string().optional(),
+  applicationPassword: z.string().optional(),
+});
+
+export const checkWordPressApiFn = createServerFn({ method: "POST" })
+  .inputValidator((data) => WordPressApiInputSchema.parse(data))
+  .handler(async ({ data }): Promise<NonNullable<AnalyzeResult["wpApiCheck"]>> => {
+    const base = (() => {
+      const url = normalizeUrl(data.url);
+      const u = new URL(url);
+      return `${u.origin}${u.pathname.replace(/\/$/, "")}`;
+    })();
+
+    let token = data.token;
+
+    // Try to exchange username/password for a JWT token
+    if (!token && data.username && data.password) {
+      const jwtUrl = `${base}/wp-json/jwt-auth/v1/token`;
+      const res = await fetchWithTimeout(
+        jwtUrl,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ username: data.username, password: data.password }),
+        },
+        15000,
+      );
+      const text = await res.text().catch(() => "{}");
+      const json = JSON.parse(text);
+      if (!json.token || typeof json.token !== "string") {
+        throw new Error(json.message || "WordPress login failed: invalid username or password.");
+      }
+      token = json.token;
+    }
+
+    // Application Passwords use Basic auth user:app_password encoded as base64
+    if (!token && data.applicationPassword) {
+      token = `Basic ${Buffer.from(data.applicationPassword).toString("base64")}`;
+    }
+
+    return checkWordPressApi(normalizeUrl(data.url), token);
   });

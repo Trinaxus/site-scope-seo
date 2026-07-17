@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import * as React from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
+import { checkWordPressApiFn } from "@/lib/analyze.functions";
 import { useServerFn } from "@tanstack/react-start";
 import {
   Search,
@@ -567,12 +568,14 @@ function Results({
   const [techSubTab, setTechSubTab] = useState("stack");
   const [seoSubTab, setSeoSubTab] = useState("checks");
   const [perfSubTab, setPerfSubTab] = useState("signals");
+  const [wpSubTab, setWpSubTab] = useState("checks");
 
   const navigateTo = (tab: string, subTab?: string) => {
     setMainTab(tab);
     if (tab === "tech" && subTab) setTechSubTab(subTab);
     if (tab === "seo" && subTab) setSeoSubTab(subTab);
     if (tab === "perf" && subTab) setPerfSubTab(subTab);
+    if (tab === "wordpress" && subTab) setWpSubTab(subTab);
   };
 
   return (
@@ -1429,17 +1432,28 @@ function Results({
 
         {result.wpChecks.length > 0 && (
           <TabsContent value="wordpress">
-            <Panel title={t("wordpressChecks.title")} icon={<Puzzle className="h-4 w-4" />}>
-              <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
-                <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                <span>{t("wordpressChecks.description")}</span>
-              </div>
-              <FilteredCheckList
-                items={result.wpChecks}
-                getKey={(c) => c.key}
-                renderItem={(c) => <SeoCheckItem c={c} />}
-              />
-            </Panel>
+            <Tabs value={wpSubTab} onValueChange={(v) => setWpSubTab(v)} className="space-y-4">
+              <TabsList className="bg-card/50 backdrop-blur border border-border/60 h-auto flex flex-wrap gap-1 p-1.5">
+                <TabsTrigger value="checks">{t("wordpress.tabChecks")}</TabsTrigger>
+                <TabsTrigger value="api">{t("wordpress.tabApi")}</TabsTrigger>
+              </TabsList>
+              <TabsContent value="checks">
+                <Panel title={t("wordpressChecks.title")} icon={<Puzzle className="h-4 w-4" />}>
+                  <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
+                    <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                    <span>{t("wordpressChecks.description")}</span>
+                  </div>
+                  <FilteredCheckList
+                    items={result.wpChecks}
+                    getKey={(c) => c.key}
+                    renderItem={(c) => <SeoCheckItem c={c} />}
+                  />
+                </Panel>
+              </TabsContent>
+              <TabsContent value="api">
+                <WordPressApiCheckPanel finalUrl={result.finalUrl} />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         )}
 
@@ -1464,6 +1478,360 @@ function Results({
       </Tabs>
     </section>
   );
+}
+
+function WordPressApiCheckPanel({ finalUrl }: { finalUrl: string }) {
+  const { t } = useI18n();
+  const [token, setToken] = useState("");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [applicationPassword, setApplicationPassword] = useState("");
+  const [apiResult, setApiResult] = useState<NonNullable<AnalyzeResult["wpApiCheck"]> | null>(null);
+  const [endpointViews, setEndpointViews] = useState<Record<number, "json" | "table">>({});
+  const [lastError, setLastError] = useState<string | null>(null);
+  const checkApi = useServerFn(checkWordPressApiFn);
+  const mutation = useMutation({
+    mutationFn: async (payload: {
+      url: string;
+      token?: string;
+      username?: string;
+      password?: string;
+      applicationPassword?: string;
+    }) => {
+      setLastError(null);
+      try {
+        return await checkApi({ data: payload });
+      } catch (e) {
+        setLastError(e instanceof Error ? e.message : String(e));
+        throw e;
+      }
+    },
+    onSuccess: (data) => {
+      if (data && typeof data === "object") {
+        setApiResult(data as NonNullable<AnalyzeResult["wpApiCheck"]>);
+      }
+    },
+  });
+
+  const handleCheck = () => {
+    mutation.mutate({
+      url: finalUrl,
+      token: token.trim() || undefined,
+      username: username.trim() || undefined,
+      password: password.trim() || undefined,
+      applicationPassword: applicationPassword.trim() || undefined,
+    });
+  };
+
+  return (
+    <Panel title={t("wordpress.apiCheckTitle")} icon={<Server className="h-4 w-4" />} className="mt-4">
+      <div className="mb-3 text-xs text-muted-foreground flex items-start gap-2">
+        <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+        <span>{t("wordpress.apiCheckDescription")}</span>
+      </div>
+
+      <div className="space-y-3 mb-4">
+        <div>
+          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">
+            {t("wordpress.apiTokenLabel")}
+          </label>
+          <Input
+            type="password"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            placeholder={t("wordpress.apiTokenPlaceholder")}
+            className="bg-card/60"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">
+              {t("wordpress.apiUsernameLabel")}
+            </label>
+            <Input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="admin"
+              className="bg-card/60"
+            />
+          </div>
+          <div>
+            <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">
+              {t("wordpress.apiPasswordLabel")}
+            </label>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="bg-card/60"
+            />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1 block">
+            {t("wordpress.apiApplicationPasswordLabel")}
+          </label>
+          <Input
+            type="password"
+            value={applicationPassword}
+            onChange={(e) => setApplicationPassword(e.target.value)}
+            placeholder="admin:xxxx xxxx xxxx xxxx"
+            className="bg-card/60"
+          />
+        </div>
+
+        <Button
+          type="button"
+          size="sm"
+          disabled={mutation.isPending}
+          onClick={handleCheck}
+          className="w-full sm:w-auto"
+        >
+          {mutation.isPending ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              {t("common.loading")}
+            </>
+          ) : (
+            t("wordpress.apiCheckButton")
+          )}
+        </Button>
+      </div>
+
+      {mutation.isPending && (
+        <div className="mb-3 text-xs text-sky-400 animate-pulse">API wird geprüft…</div>
+      )}
+
+      {(mutation.isError || lastError) && (
+        <div className="mb-3 text-xs text-rose-400">
+          {lastError || (mutation.error as Error)?.message || String(mutation.error)}
+        </div>
+      )}
+
+      {!apiResult && !mutation.isPending && !lastError && (
+        <p className="text-xs text-amber-400/80">{t("wordpress.apiNoTokenHint")}</p>
+      )}
+
+      {apiResult && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className={`rounded-lg border p-3 ${apiResult.restAvailable ? "border-emerald-500/50 bg-emerald-500/10" : "border-border/50 bg-background/40"}`}>
+              <div className="text-xs text-muted-foreground">{t("wordpress.apiRestAvailable")}</div>
+              <div className={`text-sm font-medium ${apiResult.restAvailable ? "text-emerald-400" : ""}`}>
+                {apiResult.restAvailable ? t("common.yes") : t("common.no")}
+              </div>
+            </div>
+            <div className={`rounded-lg border p-3 ${apiResult.graphQlAvailable ? "border-emerald-500/50 bg-emerald-500/10" : "border-rose-500/50 bg-rose-500/10"}`}>
+              <div className="text-xs text-muted-foreground">{t("wordpress.apiGraphQlAvailable")}</div>
+              <div className={`text-sm font-medium ${apiResult.graphQlAvailable ? "text-emerald-400" : "text-rose-400"}`}>
+                {apiResult.graphQlAvailable ? t("common.yes") : t("common.no")}
+              </div>
+            </div>
+            <div className={`rounded-lg border p-3 ${apiResult.usersListable ? "border-rose-500/50 bg-rose-500/10" : apiResult.usersListable === false ? "border-emerald-500/50 bg-emerald-500/10" : "border-border/50 bg-background/40"}`}>
+              <div className="text-xs text-muted-foreground">{t("wordpress.apiUsersListable")}</div>
+              <div className={`text-sm font-medium ${apiResult.usersListable ? "text-rose-400" : apiResult.usersListable === false ? "text-emerald-400" : ""}`}>
+                {apiResult.usersListable === null
+                  ? t("common.unknown")
+                  : apiResult.usersListable
+                    ? t("common.yes")
+                    : t("common.no")}
+              </div>
+            </div>
+          </div>
+
+          {apiResult.endpoints.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+                {t("wordpress.apiEndpoint")}
+              </h4>
+              <ul className="divide-y divide-border/50 border border-border/50 rounded-lg overflow-hidden">
+                {apiResult.endpoints.map((ep, i) => (
+                  <li key={i} className="px-3 py-2 text-sm bg-background/40">
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0">
+                        <div className="font-medium truncate">
+                          {ep.name} {ep.withToken ? `(${t("wordpress.apiWithToken")})` : `(${t("wordpress.apiAnonymous")})`}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground truncate font-mono">{ep.url}</div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0 ml-2">
+                        <Badge
+                          variant={ep.status === 200 ? "default" : "outline"}
+                          className={`text-[10px] ${ep.status === 200 ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" : ""}`}
+                        >
+                          {t("wordpress.apiStatus")}: {ep.status || "-"}
+                        </Badge>
+                        {ep.items !== undefined && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {ep.items} {t("wordpress.apiItems")}
+                          </span>
+                        )}
+                        <Badge
+                          variant={ep.accessible ? "default" : "destructive"}
+                          className={`text-[10px] ${ep.accessible ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20" : ""}`}
+                        >
+                          {ep.accessible ? t("wordpress.apiAccessible") : t("wordpress.apiBlocked")}
+                        </Badge>
+                      </div>
+                    </div>
+                    {ep.body && (
+                      <details className="mt-2 group">
+                        <summary className="cursor-pointer text-[11px] text-primary hover:underline select-none">
+                          {t("wordpress.apiShowDetails")}
+                        </summary>
+                        <div className="mt-2 rounded-lg border border-border/50 bg-background/60 p-2 overflow-auto max-h-80">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                              {t("wordpress.apiResponseBody")}
+                            </div>
+                            <div className="flex items-center rounded-md border border-border/60 overflow-hidden">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setEndpointViews((prev) => ({ ...prev, [i]: "json" }));
+                                }}
+                                className={`px-2 py-0.5 text-[10px] ${(endpointViews[i] ?? "json") === "json" ? "bg-primary text-primary-foreground" : "bg-card/50 hover:bg-card"}`}
+                              >
+                                {t("wordpress.apiViewJson")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  setEndpointViews((prev) => ({ ...prev, [i]: "table" }));
+                                }}
+                                className={`px-2 py-0.5 text-[10px] ${(endpointViews[i] ?? "json") === "table" ? "bg-primary text-primary-foreground" : "bg-card/50 hover:bg-card"}`}
+                              >
+                                {t("wordpress.apiViewTable")}
+                              </button>
+                            </div>
+                          </div>
+                          <ApiBodyView body={ep.body} mode={endpointViews[i] ?? "json"} />
+                        </div>
+                      </details>
+                    )}
+                    {ep.error && !ep.body && (
+                      <div className="mt-2 text-[10px] text-rose-400 font-mono wrap-break-word">
+                        {ep.error}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {apiResult.plugins.length > 0 && (
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+                {t("wordpress.apiPlugins")}
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {apiResult.plugins.map((p, i) => (
+                  <Badge
+                    key={i}
+                    variant={p.detected ? "default" : "outline"}
+                    className="text-[10px]"
+                    title={p.details}
+                  >
+                    {p.name} {p.detected ? "✓" : "✗"}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {apiResult.graphQlSchema && (
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wider">
+                {t("wordpress.apiGraphQlTypes")}
+              </h4>
+              <p className="text-xs text-muted-foreground wrap-break-word">
+                {apiResult.graphQlSchema}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+function ApiBodyView({ body, mode }: { body: string; mode: "json" | "table" }) {
+  if (mode === "json") {
+    return <pre className="text-[10px] font-mono wrap-break-word">{body}</pre>;
+  }
+
+  let data: unknown;
+  try {
+    data = JSON.parse(body);
+  } catch {
+    return <pre className="text-[10px] font-mono wrap-break-word">{body}</pre>;
+  }
+
+  if (Array.isArray(data) && data.length > 0) {
+    const first = data.find((d) => d && typeof d === "object") as Record<string, unknown> | undefined;
+    const keys = first ? Object.keys(first) : [];
+    const rows = data.slice(0, 50);
+    return (
+      <div className="overflow-auto max-h-72">
+        <table className="w-full text-[10px] border-collapse">
+          <thead>
+            <tr className="border-b border-border/50 text-muted-foreground">
+              {keys.map((k) => (
+                <th key={k} className="text-left px-2 py-1 font-medium whitespace-nowrap">{k}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, idx) => (
+              <tr key={idx} className="border-b border-border/30 hover:bg-card/40">
+                {keys.map((k) => {
+                  const v = (row as Record<string, unknown>)[k];
+                  let text: string;
+                  if (v === null || v === undefined) text = "";
+                  else if (typeof v === "object") text = JSON.stringify(v).slice(0, 80);
+                  else text = String(v).slice(0, 120);
+                  return (
+                    <td key={k} className="px-2 py-1 whitespace-nowrap font-mono" title={typeof v === "object" ? JSON.stringify(v) : String(v)}>
+                      {text}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  if (data && typeof data === "object") {
+    const entries = Object.entries(data).slice(0, 50);
+    return (
+      <div className="overflow-auto max-h-72">
+        <table className="w-full text-[10px] border-collapse">
+          <tbody>
+            {entries.map(([k, v], idx) => (
+              <tr key={idx} className="border-b border-border/30 hover:bg-card/40">
+                <td className="px-2 py-1 font-medium text-muted-foreground whitespace-nowrap align-top">{k}</td>
+                <td className="px-2 py-1 font-mono wrap-break-word">
+                  {typeof v === "object" ? JSON.stringify(v).slice(0, 200) : String(v).slice(0, 200)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  return <pre className="text-[10px] font-mono wrap-break-word">{body}</pre>;
 }
 
 function CompareSection({ analyze }: { analyze: (url: string) => Promise<AnalyzeResult> }) {

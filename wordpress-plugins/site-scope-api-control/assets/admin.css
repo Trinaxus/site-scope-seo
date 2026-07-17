@@ -1,0 +1,243 @@
+.site-scope-api-control {
+  --ssa-primary: #6366f1;
+  --ssa-primary-hover: #4f46e5;
+  --ssa-success: #22c55e;
+  --ssa-danger: #ef4444;
+  --ssa-bg: #ffffff;
+  --ssa-surface: #f9fafb;
+  --ssa-border: #e5e7eb;
+  --ssa-text: #111827;
+  --ssa-muted: #6b7280;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 10px;
+}
+
+.site-scope-api-control h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--ssa-text);
+  text-align: center;
+}
+
+.site-scope-api-control__intro {
+  color: var(--ssa-muted);
+  font-size: 13px;
+  margin-bottom: 22px;
+  line-height: 1.5;
+  text-align: center;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.ssa-card {
+  background: var(--ssa-bg);
+  border: 1px solid var(--ssa-border);
+  border-radius: 16px;
+  padding: 22px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.ssa-card__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--ssa-text);
+}
+
+.ssa-card__title svg {
+  width: 18px;
+  height: 18px;
+  color: var(--ssa-primary);
+}
+
+.ssa-card__description {
+  color: var(--ssa-muted);
+  font-size: 12px;
+  margin-bottom: 18px;
+  line-height: 1.5;
+}
+
+.ssa-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+}
+
+@media (min-width: 900px) {
+  .ssa-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.ssa-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--ssa-border);
+  gap: 12px;
+}
+
+.ssa-toggle-row:last-child {
+  border-bottom: none;
+}
+
+.ssa-toggle-row__info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ssa-toggle-row__icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--ssa-surface);
+  color: var(--ssa-primary);
+  flex-shrink: 0;
+}
+
+.ssa-toggle-row__icon svg {
+  width: 14px;
+  height: 14px;
+  max-width: 14px;
+  max-height: 14px;
+}
+
+.ssa-toggle-row__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ssa-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ssa-toggle-row__hint {
+  font-size: 11px;
+  color: var(--ssa-muted);
+  margin-top: 1px;
+}
+
+.ssa-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.ssa-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.ssa-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #d1d5db;
+  border-radius: 22px;
+  transition: 0.2s;
+}
+
+.ssa-slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: 0.2s;
+}
+
+.ssa-switch input:checked + .ssa-slider {
+  background-color: var(--ssa-primary);
+}
+
+.ssa-switch input:checked + .ssa-slider:before {
+  transform: translateX(18px);
+}
+
+.ssa-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ssa-status--public {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.ssa-status--protected {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.ssa-status svg {
+  width: 10px;
+  height: 10px;
+}
+
+.ssa-card--warning {
+  border-left: 4px solid var(--ssa-danger);
+}
+
+.ssa-submit {
+  margin-top: 8px;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.ssa-submit .button.button-primary {
+  background: var(--ssa-primary);
+  border-color: var(--ssa-primary);
+  border-radius: 8px;
+  padding: 8px 28px;
+  height: auto;
+  font-weight: 500;
+  transition: 0.15s;
+}
+
+.ssa-submit .button.button-primary:hover {
+  background: var(--ssa-primary-hover);
+  border-color: var(--ssa-primary-hover);
+}
+
+.ssa-master-toggle {
+  background: var(--ssa-surface);
+  border: 1px solid var(--ssa-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.ssa-master-toggle .ssa-toggle-row {
+  padding: 0;
+  border-bottom: none;
+}

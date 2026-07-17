@@ -1,0 +1,120 @@
+.tonband-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.tonband-gallery-item {
+  display: block;
+  overflow: hidden;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  text-decoration: none;
+}
+
+.tonband-gallery-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+
+.tonband-gallery-item img,
+.tonband-single-image img,
+.tonband-preview-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: cover;
+}
+
+.tonband-single-image {
+  margin: 16px 0;
+}
+
+.tonband-single-image img {
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.tonband-gallery--locked {
+  padding: 16px;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #991b1b;
+}
+
+.tonband-error {
+  padding: 12px;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  color: #991b1b;
+}
+
+.tonband-gallery--locked {
+  padding: 20px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.tonband-locked-preview {
+  margin-bottom: 16px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.tonband-locked-preview img {
+  width: 100%;
+  max-width: 300px;
+  height: auto;
+  filter: blur(10px) brightness(0.6);
+  display: block;
+  margin: 0 auto;
+}
+
+.tonband-unlock-form {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.tonband-unlock-form input[type="password"] {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 14px;
+  min-width: 180px;
+}
+
+.tonband-unlock-form button {
+  padding: 8px 16px;
+  background: #6366f1;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.tonband-unlock-form button:hover {
+  background: #4f46e5;
+}
+
+.tonband-unlock-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.tonband-unlock-message {
+  display: block;
+  width: 100%;
+  color: #ef4444;
+  font-size: 13px;
+  margin-top: 8px;
+}
